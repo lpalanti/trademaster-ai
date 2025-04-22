@@ -50,10 +50,11 @@ def obter_dados_acoes():
         last_close = float(data['Time Series (1min)'][times[0]]['4. close'])
         ativo = {
             'Ativo': ticker,
-            'Último Preço': f"${last_close:.2f}",
-            'Preço Máximo (1min)': f"${float(data['Time Series (1min)'][times[0]]['2. high']):.2f}",
-            'Preço Mínimo (1min)': f"${float(data['Time Series (1min)'][times[0]]['3. low']):.2f}",
-            'Volume de Negócios (1min)': data['Time Series (1min)'][times[0]]['5. volume'],
+            'Volatilidade': f"N/A",  # Ações não possuem volatilidade em 24h como as criptos
+            'Preço Mínimo': f"${float(data['Time Series (1min)'][times[0]]['3. low']):.2f}",
+            'Preço Máximo': f"${float(data['Time Series (1min)'][times[0]]['2. high']):.2f}",
+            'Preço Ideal de Compra': f"${float(data['Time Series (1min)'][times[0]]['3. low']):.2f}",
+            'Preço Ideal de Venda': f"${float(data['Time Series (1min)'][times[0]]['2. high']):.2f}",
         }
         ativos.append(ativo)
 
