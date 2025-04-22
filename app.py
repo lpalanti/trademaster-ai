@@ -25,6 +25,43 @@ def get_price(coin):
         return price
     return None
 
+st.subheader("📊 Volatilidade das Criptomoedas (24h)")
+
+@st.cache_data(ttl=60)
+def get_volatility_data():
+    ids = ",".join(coins.values())
+    url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={ids}&order=market_cap_desc"
+    r = requests.get(url)
+    if r.status_code == 200:
+        data = r.json()
+        return pd.DataFrame([{
+            "name": item["name"],
+            "symbol": item["symbol"].upper(),
+            "volatility": abs(item["price_change_percentage_24h"] or 0)
+        } for item in data])
+    return pd.DataFrame()
+
+vol_df = get_volatility_data()
+vol_df_sorted = vol_df.sort_values("volatility", ascending=False)
+
+fig_vol = go.Figure(go.Bar(
+    x=vol_df_sorted["volatility"],
+    y=[f"{n} ({s})" for n, s in zip(vol_df_sorted["name"], vol_df_sorted["symbol"])],
+    orientation='h',
+    marker=dict(color='rgba(255,100,100,0.6)', line=dict(color='red', width=1.5))
+))
+
+fig_vol.update_layout(
+    height=500,
+    xaxis_title="Variação percentual (absoluta) nas últimas 24h",
+    yaxis_title="Criptomoeda",
+    title="🔺 Ranking de Volatilidade Atual",
+    yaxis=dict(autorange="reversed")
+)
+
+st.plotly_chart(fig_vol, use_container_width=True)
+
+
 # Atualiza o histórico
 price = get_price(coin)
 if price:
