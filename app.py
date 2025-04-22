@@ -58,19 +58,14 @@ COMMODITIES = {
     "Paládio": "PA"
 }
 
-
-@st.cache_data(ttl=180)
 def get_usd_brl():
     url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=BRL&apikey={API_KEY}"
     response = requests.get(url).json()
     try:
-        rate = float(response['Realtime Currency Exchange Rate']['5. Exchange Rate'])
+        return float(response['Realtime Currency Exchange Rate']['5. Exchange Rate'])
     except:
-        rate = 5.0  # fallback
-    return rate
+        return 5.0  # fallback
 
-
-@st.cache_data(ttl=180)
 def fetch_data(symbol, market="stock", usd_brl=5.0):
     if market == "crypto":
         url = f"https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_INTRADAY&symbol={symbol}&market=USD&apikey={API_KEY}"
@@ -90,7 +85,6 @@ def fetch_data(symbol, market="stock", usd_brl=5.0):
         high = df["2. high"].max()
         low = df["3. low"].min()
 
-        # Conversão para reais
         high *= usd_brl
         low *= usd_brl
         volatility = high - low
@@ -116,31 +110,25 @@ def fetch_data(symbol, market="stock", usd_brl=5.0):
             "Ideal Venda": "-"
         }
 
-
-def render_category(name, data_dict, market_type, usd_brl):
-    st.subheader(name)
+def render_category(title, ativos, market_type, usd_brl):
+    st.subheader(title)
     rows = []
-    for label, symbol in data_dict.items():
-        data = fetch_data(symbol, market_type, usd_brl)
-        row = {"Ativo": label}
-        row.update(data)
-        rows.append(row)
+    for nome, sigla in ativos.items():
+        info = fetch_data(sigla, market_type, usd_brl)
+        linha = {"Ativo": nome}
+        linha.update(info)
+        rows.append(linha)
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
-
 # Layout
-st.set_page_config(page_title="TradeMaster AI", layout="wide")
-st.title("📊 TradeMaster AI — Painel em Reais (R$) Atualizado a cada 3 minutos")
+st.set_page_config(page_title="TradeMaster AI", layout="centered")
+st.title("📊 TradeMaster AI — Painel de Ativos em Reais (R$)")
 
 usd_brl = get_usd_brl()
-col1, col2, col3 = st.columns(3)
+st.markdown(f"💵 Cotação do dólar: **R$ {usd_brl:.2f}**")
 
-with col1:
-    render_category("💰 Cripto", CRYPTO, "crypto", usd_brl)
-
-with col2:
-    render_category("📈 Ações", STOCKS, "stock", usd_brl)
-
-with col3:
-    render_category("🛢️ Commodities", COMMODITIES, "stock", usd_brl)
+# Painéis um abaixo do outro
+render_category("💰 Cripto", CRYPTO, "crypto", usd_brl)
+render_category("📈 Ações", STOCKS, "stock", usd_brl)
+render_category("🛢️ Commodities", COMMODITIES, "stock", usd_brl)
