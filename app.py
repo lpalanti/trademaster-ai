@@ -62,7 +62,7 @@ def get_market_data(assets, asset_type="crypto"):
     r = requests.get(url)
     if r.status_code == 200:
         data = r.json()
-        return pd.DataFrame([{
+        df = pd.DataFrame([{
             "name": item.get("name", item.get("symbol")),
             "symbol": item.get("symbol").upper(),
             "volatility": abs(item.get("price_change_percentage_24h", 0) if asset_type == "crypto" else item.get("percent_change", 0)),
@@ -72,6 +72,12 @@ def get_market_data(assets, asset_type="crypto"):
             "buy_suggestion": round(item.get("current_price", 0) * 0.95, 4) if asset_type == "crypto" else round(item.get("close", 0) * 0.95, 4),
             "sell_suggestion": round(item.get("current_price", 0) * 1.05, 4) if asset_type == "crypto" else round(item.get("close", 0) * 1.05, 4)
         } for item in data])
+        
+        # Verificando se a coluna 'volatility' foi criada corretamente
+        if "volatility" not in df.columns:
+            df["volatility"] = 0  # Garantir que a coluna exista
+
+        return df
     return pd.DataFrame()
 
 # -----------------------------
@@ -81,22 +87,53 @@ def get_market_data(assets, asset_type="crypto"):
 st.subheader("📊 Volatilidade das Criptomoedas (últimas 24h)")
 
 crypto_df = get_market_data(coins, asset_type="crypto")
-crypto_df_sorted = crypto_df.sort_values("volatility", ascending=False)
+if not crypto_df.empty:
+    crypto_df_sorted = crypto_df.sort_values("volatility", ascending=False)
 
-fig_crypto_vol = go.Figure(go.Bar(
-    x=crypto_df_sorted["volatility"],
-    y=[f"{n} ({s})" for n, s in zip(crypto_df_sorted["name"], crypto_df_sorted["symbol"])],
-    orientation='h',
-    marker=dict(color='rgba(255,100,100,0.6)', line=dict(color='red', width=1.5))
-))
-fig_crypto_vol.update_layout(
-    height=500,
-    xaxis_title="Variação percentual (absoluta) nas últimas 24h",
-    yaxis_title="Criptomoeda",
-    title="🔺 Ranking de Volatilidade Atual (Criptos)",
-    yaxis=dict(autorange="reversed")
-)
-st.plotly_chart(fig_crypto_vol, use_container_width=True)
+    fig_crypto_vol = go.Figure(go.Bar(
+        x=crypto_df_sorted["volatility"],
+        y=[f"{n} ({s})" for n, s in zip(crypto_df_sorted["name"], crypto_df_sorted["symbol"])],
+        orientation='h',
+        marker=dict(color='rgba(255,100,100,0.6)', line=dict(color='red', width=1.5))
+    ))
+    fig_crypto_vol.update_layout(
+        height=500,
+        xaxis_title="Variação percentual (absoluta) nas últimas 24h",
+        yaxis_title="Criptomoeda",
+        title="🔺 Ranking de Volatilidade Atual (Criptos)",
+        yaxis=dict(autorange="reversed")
+    )
+    st.plotly_chart(fig_crypto_vol, use_container_width=True)
+
+    # -----------------------------
+    # TABELA DE DETALHES DE CRIPTOS
+    # -----------------------------
+
+    st.markdown("### 🧾 Detalhes dos Ativos Cripto (Valores em USD)")
+    crypto_df_sorted["volatility"] = crypto_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
+    crypto_df_sorted["price"] = crypto_df_sorted["price"].map(lambda x: f"${x:.4f}")
+    crypto_df_sorted["low_24h"] = crypto_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
+    crypto_df_sorted["high_24h"] = crypto_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
+    crypto_df_sorted["buy_suggestion"] = crypto_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
+    crypto_df_sorted["sell_suggestion"] = crypto_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
+
+    st.dataframe(
+        crypto_df_sorted[[
+            "name", "symbol", "volatility", "price",
+            "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
+        ]].rename(columns={
+            "name": "Nome",
+            "symbol": "Ticker",
+            "volatility": "Volatilidade (24h)",
+            "price": "Preço atual",
+            "low_24h": "Mín. do dia",
+            "high_24h": "Máx. do dia",
+            "buy_suggestion": "Sugestão de Compra",
+            "sell_suggestion": "Sugestão de Venda"
+        }),
+        use_container_width=True,
+        height=500
+    )
 
 # -----------------------------
 # PAINEL DE VOLATILIDADE DAS AÇÕES
@@ -105,79 +142,50 @@ st.plotly_chart(fig_crypto_vol, use_container_width=True)
 st.subheader("📊 Volatilidade das Ações (últimas 24h)")
 
 stock_df = get_market_data(stocks, asset_type="stock")
-stock_df_sorted = stock_df.sort_values("volatility", ascending=False)
+if not stock_df.empty:
+    stock_df_sorted = stock_df.sort_values("volatility", ascending=False)
 
-fig_stock_vol = go.Figure(go.Bar(
-    x=stock_df_sorted["volatility"],
-    y=[f"{n} ({s})" for n, s in zip(stock_df_sorted["name"], stock_df_sorted["symbol"])],
-    orientation='h',
-    marker=dict(color='rgba(100,100,255,0.6)', line=dict(color='blue', width=1.5))
-))
-fig_stock_vol.update_layout(
-    height=500,
-    xaxis_title="Variação percentual (absoluta) nas últimas 24h",
-    yaxis_title="Ação",
-    title="🔺 Ranking de Volatilidade Atual (Ações)",
-    yaxis=dict(autorange="reversed")
-)
-st.plotly_chart(fig_stock_vol, use_container_width=True)
+    fig_stock_vol = go.Figure(go.Bar(
+        x=stock_df_sorted["volatility"],
+        y=[f"{n} ({s})" for n, s in zip(stock_df_sorted["name"], stock_df_sorted["symbol"])],
+        orientation='h',
+        marker=dict(color='rgba(100,100,255,0.6)', line=dict(color='blue', width=1.5))
+    ))
+    fig_stock_vol.update_layout(
+        height=500,
+        xaxis_title="Variação percentual (absoluta) nas últimas 24h",
+        yaxis_title="Ação",
+        title="🔺 Ranking de Volatilidade Atual (Ações)",
+        yaxis=dict(autorange="reversed")
+    )
+    st.plotly_chart(fig_stock_vol, use_container_width=True)
 
-# -----------------------------
-# TABELA DE DETALHES DE CRIPTOS
-# -----------------------------
+    # -----------------------------
+    # TABELA DE DETALHES DE AÇÕES
+    # -----------------------------
 
-st.markdown("### 🧾 Detalhes dos Ativos Cripto (Valores em USD)")
-crypto_df_sorted["volatility"] = crypto_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
-crypto_df_sorted["price"] = crypto_df_sorted["price"].map(lambda x: f"${x:.4f}")
-crypto_df_sorted["low_24h"] = crypto_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
-crypto_df_sorted["high_24h"] = crypto_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
-crypto_df_sorted["buy_suggestion"] = crypto_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
-crypto_df_sorted["sell_suggestion"] = crypto_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
+    st.markdown("### 🧾 Detalhes das Ações (Valores em USD)")
+    stock_df_sorted["volatility"] = stock_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
+    stock_df_sorted["price"] = stock_df_sorted["price"].map(lambda x: f"${x:.4f}")
+    stock_df_sorted["low_24h"] = stock_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
+    stock_df_sorted["high_24h"] = stock_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
+    stock_df_sorted["buy_suggestion"] = stock_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
+    stock_df_sorted["sell_suggestion"] = stock_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
 
-st.dataframe(
-    crypto_df_sorted[[
-        "name", "symbol", "volatility", "price",
-        "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
-    ]].rename(columns={
-        "name": "Nome",
-        "symbol": "Ticker",
-        "volatility": "Volatilidade (24h)",
-        "price": "Preço atual",
-        "low_24h": "Mín. do dia",
-        "high_24h": "Máx. do dia",
-        "buy_suggestion": "Sugestão de Compra",
-        "sell_suggestion": "Sugestão de Venda"
-    }),
-    use_container_width=True,
-    height=500
-)
-
-# -----------------------------
-# TABELA DE DETALHES DE AÇÕES
-# -----------------------------
-
-st.markdown("### 🧾 Detalhes das Ações (Valores em USD)")
-stock_df_sorted["volatility"] = stock_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
-stock_df_sorted["price"] = stock_df_sorted["price"].map(lambda x: f"${x:.4f}")
-stock_df_sorted["low_24h"] = stock_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
-stock_df_sorted["high_24h"] = stock_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
-stock_df_sorted["buy_suggestion"] = stock_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
-stock_df_sorted["sell_suggestion"] = stock_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
-
-st.dataframe(
-    stock_df_sorted[[
-        "name", "symbol", "volatility", "price",
-        "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
-    ]].rename(columns={
-        "name": "Nome",
-        "symbol": "Ticker",
-        "volatility": "Volatilidade (24h)",
-        "price": "Preço atual",
-        "low_24h": "Mín. do dia",
-        "high_24h": "Máx. do dia",
-        "buy_suggestion": "Sugestão de Compra",
-        "sell_suggestion": "Sugestão de Venda"
-    }),
-    use_container_width=True,
-    height=500
-)
+    st.dataframe(
+        stock_df_sorted[[
+            "name", "symbol", "volatility", "price",
+            "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
+        ]].rename(columns={
+            "name": "Nome",
+            "symbol": "Ticker",
+            "volatility": "Volatilidade (24h)",
+            "price": "Preço atual",
+            "low_24h": "Mín. do dia",
+            "high_24h": "Máx. do dia",
+            "buy_suggestion": "Sugestão de Compra",
+            "sell_suggestion": "Sugestão de Venda"
+        }),
+        use_container_width=True,
+        height=500
+    )
