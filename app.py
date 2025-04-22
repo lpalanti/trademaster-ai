@@ -20,16 +20,22 @@ ativos = [a.strip().upper() for a in ativos_usuario.split(',')]
 agora = datetime.utcnow()
 inicio = agora - timedelta(hours=3)
 
-# Função para obter dados de cada ativo
 def analisar_ativo(ticker):
     try:
         ativo = yf.Ticker(ticker)
         df = ativo.history(interval="5m", start=inicio, end=agora)
         df.dropna(inplace=True)
-        preco_atual = df['Close'][-1]
+
+        if df.empty or len(df) < 2:
+            return {
+                'Ativo': ticker,
+                'Erro': 'Sem dados suficientes para análise'
+            }
+
+        preco_atual = df['Close'].iloc[-1]
         preco_max = df['High'].max()
         preco_min = df['Low'].min()
-        variacao = ((df['Close'][-1] - df['Open'][0]) / df['Open'][0]) * 100
+        variacao = ((df['Close'].iloc[-1] - df['Open'].iloc[0]) / df['Open'].iloc[0]) * 100
 
         return {
             'Ativo': ticker,
