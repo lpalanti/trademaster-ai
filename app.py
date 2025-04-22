@@ -1,94 +1,86 @@
-import streamlit as st
 import requests
 import pandas as pd
-import time
+import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
-# Função para obter dados das criptos usando a API do CoinGecko
+# --- Função para obter dados de criptomoedas ---
 def obter_dados_cripto():
     url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         'vs_currency': 'usd',
         'ids': 'bitcoin,ethereum,ripple,dogecoin,litecoin,cardano,polkadot,solana,avalanche,chainlink,shiba-inu,binancecoin,polygon,uniswap,terra-luna',
     }
+    response = requests.get(url, params=params)
+    data = response.json()
 
-    try:
-        response = requests.get(url, params=params)
-        data = response.json()
-
-        ativos = []
-        for item in data:
-            if all(k in item for k in ['name', 'symbol', 'price_change_percentage_24h', 'low_24h', 'high_24h']):
-                ativos.append({
-                    'Ativo': f"{item['name']} ({item['symbol'].upper()})",
-                    'Volatilidade': f"{item['price_change_percentage_24h']:.2f}%",
-                    'Preço Mínimo': f"${item['low_24h']:.2f}",
-                    'Preço Máximo': f"${item['high_24h']:.2f}",
-                    'Preço Ideal de Compra': f"${item['low_24h']:.2f}",
-                    'Preço Ideal de Venda': f"${item['high_24h']:.2f}",
-                })
-
-        return pd.DataFrame(ativos)
-
-    except Exception as e:
-        st.error(f"Erro ao obter dados das criptomoedas: {e}")
-        return pd.DataFrame()
-
-# Função para obter dados das ações usando a API do Alpha Vantage
-def obter_dados_acoes():
-    API_KEY = 'IOKSXPMXJXFIKTI3'
-    tickers = ['TSLA', 'AMZN', 'AAPL', 'META', 'NFLX', 'NVDA']
     ativos = []
-
-    for ticker in tickers:
-        try:
-            url = 'https://www.alphavantage.co/query'
-            params = {
-                'function': 'TIME_SERIES_INTRADAY',
-                'symbol': ticker,
-                'interval': '1min',
-                'apikey': API_KEY
-            }
-            response = requests.get(url, params=params)
-            data = response.json()
-
-            if 'Time Series (1min)' not in data:
-                continue
-
-            times = list(data['Time Series (1min)'].keys())
-            latest_data = data['Time Series (1min)'][times[0]]
-
-            ativo = {
-                'Ativo': ticker,
-                'Volatilidade': "N/A",
-                'Preço Mínimo': f"${float(latest_data['3. low']):.2f}",
-                'Preço Máximo': f"${float(latest_data['2. high']):.2f}",
-                'Preço Ideal de Compra': f"${float(latest_data['3. low']):.2f}",
-                'Preço Ideal de Venda': f"${float(latest_data['2. high']):.2f}",
-            }
-            ativos.append(ativo)
-
-        except Exception as e:
-            st.error(f"Erro ao obter dados da ação {ticker}: {e}")
-            continue
+    for item in data:
+        ativos.append({
+            'Ativo': item.get('name', '') + ' (' + item.get('symbol', '').upper() + ')',
+            'Volatilidade': f"{item.get('price_change_percentage_24h', 0):.2f}%",
+            'Preço Mínimo': f"${item.get('low_24h', 0):.2f}",
+            'Preço Máximo': f"${item.get('high_24h', 0):.2f}",
+            'Preço Ideal de Compra': f"${item.get('low_24h', 0):.2f}",
+            'Preço Ideal de Venda': f"${item.get('high_24h', 0):.2f}",
+        })
 
     return pd.DataFrame(ativos)
 
-# Função principal do app
+# --- Função para obter dados de ações ---
+def obter_dados_acoes():
+    API_KEY = 'IOKSXPMXJXFIKTI3'
+    tickers = ['TSLA', 'AMZN', 'AAPL', 'META', 'NFLX', 'NVDA', 'GME', 'AMC', 'SPOT', 'PLTR', 'ROKU', 'SQ', 'ZM', 'DOCU', 'BYND', 'COIN', 'HOOD', 'MRNA', 'SNOW']
+    ativos = []
+
+    for ticker in tickers:
+        url = f'https://www.alphavantage.co/query'
+        params = {
+            'function': 'TIME_SERIES_INTRADAY',
+            'symbol': ticker,
+            'interval': '1min',
+            'apikey': API_KEY
+        }
+        response = requests.get(url, params=params)
+        data = response.json()
+
+        if 'Time Series (1min)' not in data:
+            continue
+
+        series = data['Time Series (1min)']
+        times = list(series.keys())
+        valores = [float(info['4. close']) for info in series.values()]
+        preco_atual = float(series[times[0]]['4. close'])
+        preco_minimo = min(valores)
+        preco_maximo = max(valores)
+
+        ativos.append({
+            'Ativo': ticker,
+            'Volatilidade': f"{((preco_maximo - preco_minimo) / preco_minimo) * 100:.2f}%",
+            'Preço Mínimo': f"${preco_minimo:.2f}",
+            'Preço Máximo': f"${preco_maximo:.2f}",
+            'Preço Ideal de Compra': f"${preco_minimo:.2f}",
+            'Preço Ideal de Venda': f"${preco_maximo:.2f}",
+        })
+
+    return pd.DataFrame(ativos)
+
+# --- Função principal do app ---
 def main():
-    st.title("Painel de Cripto e Ações - Atualização a cada 1 minuto")
+    # Atualiza a cada 60 segundos (60000 ms)
+    st_autorefresh(interval=60000, key="refresh")
 
+    st.title("📊 Painel de Cripto e Ações")
+    st.caption("Atualização automática a cada 60 segundos")
+
+    st.subheader("💰 Criptomoedas")
     df_cripto = obter_dados_cripto()
-    st.header("Criptomoedas")
-    st.dataframe(df_cripto)
+    st.dataframe(df_cripto, use_container_width=True)
 
+    st.subheader("📈 Ações")
     df_acoes = obter_dados_acoes()
-    st.header("Ações")
-    st.dataframe(df_acoes)
+    st.dataframe(df_acoes, use_container_width=True)
 
-    # Atualização automática a cada minuto
-    st.caption("Atualizando a cada 60 segundos...")
-    time.sleep(60)
-    st.experimental_rerun()
-
+# --- Executa o app ---
 if __name__ == "__main__":
     main()
+
