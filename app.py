@@ -3,7 +3,9 @@ import requests
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+
+st.set_page_config(page_title="TradeMaster AI", layout="centered")
+st.title("📊 TradeMaster AI — Painel de Ativos em Reais (R$)")
 
 # Dicionários de ativos
 CRYPTO = {
@@ -119,54 +121,73 @@ def fetch_yfinance_data(symbol, usd_brl):
         "Ideal Venda": f"R$ {ideal_sell:.2f}"
     }
 
-# Plot candlestick
 def plot_candlestick(df, is_crypto=False):
     if is_crypto:
-        df = df.copy()
         df["Open"] = df["price_brl"]
         df["High"] = df["price_brl"]
         df["Low"] = df["price_brl"]
         df["Close"] = df["price_brl"]
+        df["Datetime"] = df["timestamp"]
+    else:
+        df["Datetime"] = df["Datetime"]
 
     fig = go.Figure(data=[go.Candlestick(
-        x=df["timestamp"] if "timestamp" in df.columns else df["Datetime"],
+        x=df["Datetime"],
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
         close=df["Close"]
     )])
-    fig.update_layout(xaxis_rangeslider_visible=False, height=400)
+    fig.update_layout(xaxis_rangeslider_visible=False, height=300)
     return fig
 
-# App
-st.set_page_config(page_title="TradeMaster AI", layout="centered")
-st.title("📊 TradeMaster AI — Painel de Ativos em Reais (R$)")
+# ================== INTERFACE ==================
 
 usd_brl = get_usd_brl()
 st.markdown(f"💵 Cotação do dólar: **R$ {usd_brl:.2f}**")
 
-opcao = st.selectbox("Escolha o painel para visualizar:", ["Cripto", "Ações", "Commodities"])
-
-if opcao == "Cripto":
-    ativo = st.selectbox("Selecione um criptoativo:", list(CRYPTO.keys()))
-    df, info = fetch_crypto_data(CRYPTO[ativo], usd_brl)
-    st.write(pd.DataFrame([info]))
+# Painel Cripto
+st.header("💰 Criptomoedas")
+crypto_data = []
+for name, coin_id in CRYPTO.items():
+    df, info = fetch_crypto_data(coin_id, usd_brl)
+    info["Ativo"] = name
+    crypto_data.append(info)
+df_crypto_table = pd.DataFrame(crypto_data).set_index("Ativo")
+st.dataframe(df_crypto_table, use_container_width=True)
+for name, coin_id in CRYPTO.items():
+    df, _ = fetch_crypto_data(coin_id, usd_brl)
+    st.subheader(f"📉 {name}")
     st.plotly_chart(plot_candlestick(df, is_crypto=True), use_container_width=True)
 
-elif opcao == "Ações":
-    ativo = st.selectbox("Selecione uma ação:", list(STOCKS.keys()))
-    df, info = fetch_yfinance_data(STOCKS[ativo], usd_brl)
+# Painel Ações
+st.header("📈 Ações")
+stocks_data = []
+for name, ticker in STOCKS.items():
+    df, info = fetch_yfinance_data(ticker, usd_brl)
+    if info:
+        info["Ativo"] = name
+        stocks_data.append(info)
+df_stocks_table = pd.DataFrame(stocks_data).set_index("Ativo")
+st.dataframe(df_stocks_table, use_container_width=True)
+for name, ticker in STOCKS.items():
+    df, _ = fetch_yfinance_data(ticker, usd_brl)
     if not df.empty:
-        st.write(pd.DataFrame([info]))
+        st.subheader(f"📉 {name}")
         st.plotly_chart(plot_candlestick(df), use_container_width=True)
-    else:
-        st.warning("Dados indisponíveis no momento.")
 
-elif opcao == "Commodities":
-    ativo = st.selectbox("Selecione uma commodity:", list(COMMODITIES.keys()))
-    df, info = fetch_yfinance_data(COMMODITIES[ativo], usd_brl)
+# Painel Commodities
+st.header("🛢️ Commodities")
+commodities_data = []
+for name, ticker in COMMODITIES.items():
+    df, info = fetch_yfinance_data(ticker, usd_brl)
+    if info:
+        info["Ativo"] = name
+        commodities_data.append(info)
+df_commodities_table = pd.DataFrame(commodities_data).set_index("Ativo")
+st.dataframe(df_commodities_table, use_container_width=True)
+for name, ticker in COMMODITIES.items():
+    df, _ = fetch_yfinance_data(ticker, usd_brl)
     if not df.empty:
-        st.write(pd.DataFrame([info]))
+        st.subheader(f"📉 {name}")
         st.plotly_chart(plot_candlestick(df), use_container_width=True)
-    else:
-        st.warning("Dados indisponíveis no momento.")
