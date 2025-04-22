@@ -1,188 +1,76 @@
-import streamlit as st
-import requests
 import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime
+import requests
+import streamlit as st
 
-st.set_page_config(layout="wide")
-st.title("📈 TradeMaster AI – Assistente de Daytrade Cripto & Ações")
-
-# Dicionários com as criptos e ações
-coins = {
-    "Bitcoin (BTC)": "bitcoin",
-    "Ethereum (ETH)": "ethereum",
-    "Ripple (XRP)": "ripple",
-    "Dogecoin (DOGE)": "dogecoin",
-    "Litecoin (LTC)": "litecoin",
-    "Cardano (ADA)": "cardano",
-    "Polkadot (DOT)": "polkadot",
-    "Solana (SOL)": "solana",
-    "Avalanche (AVAX)": "avalanche-2",
-    "Chainlink (LINK)": "chainlink",
-    "Shiba Inu (SHIB)": "shiba-inu",
-    "Binance Coin (BNB)": "binancecoin",
-    "Polygon (MATIC)": "polygon",
-    "Uniswap (UNI)": "uniswap",
-    "Terra (LUNA)": "terra-luna"
-}
-
-stocks = {
-    "Tesla (TSLA)": "tsla",
-    "Amazon (AMZN)": "amzn",
-    "Apple (AAPL)": "aapl",
-    "Meta (META)": "meta",
-    "Netflix (NFLX)": "nflx",
-    "Nvidia (NVDA)": "nvda",
-    "GameStop (GME)": "gme",
-    "AMC Entertainment (AMC)": "amc",
-    "Spotify (SPOT)": "spot",
-    "Palantir (PLTR)": "pltr",
-    "Roku (ROKU)": "roku",
-    "Square (SQ)": "sq",
-    "Zoom Video (ZM)": "zm",
-    "DocuSign (DOCU)": "docu",
-    "Beyond Meat (BYND)": "bynd",
-    "Coinbase (COIN)": "coin",
-    "Robinhood (HOOD)": "hood",
-    "Moderna (MRNA)": "mrna",
-    "Snowflake (SNOW)": "snow"
-}
-
-# -----------------------------
-# FUNÇÃO PARA BUSCAR DADOS DA API
-# -----------------------------
-
-@st.cache_data(ttl=60)
+# Função para buscar os dados de mercado
 def get_market_data(assets, asset_type="crypto"):
-    if asset_type == "crypto":
-        url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={','.join(assets.values())}&order=market_cap_desc"
-    else:  # stock data via another API
-        url = f"https://api.twelvedata.com/time_series?symbol={','.join(assets.values())}&interval=1min&apikey=YOUR_TWELVE_DATA_API_KEY"
+    url = f"https://api.example.com/{asset_type}"  # Altere para a URL correta da API
+    response = requests.get(url, params={"assets": assets})
     
-    r = requests.get(url)
-    if r.status_code == 200:
-        data = r.json()
-       df = pd.DataFrame([{
-    # Verificando se 'item' é um dicionário e se contém as chaves necessárias
-    "name": item["name"] if isinstance(item, dict) and "name" in item else item.get("symbol", "Desconhecido"),
-    "symbol": item["symbol"].upper() if isinstance(item, dict) and "symbol" in item else "Desconhecido",
-    "volatility": abs(item.get("price_change_percentage_24h", 0)) if isinstance(item, dict) else 0,
-    "price": item.get("current_price") if isinstance(item, dict) else 0
-} for item in data])
-        
-        # Verificando se a coluna 'volatility' foi criada corretamente
-        if "volatility" not in df.columns:
-            df["volatility"] = 0  # Garantir que a coluna exista
-
+    if response.status_code == 200:
+        data = response.json()
+        df = pd.DataFrame([{
+            "name": item["name"] if isinstance(item, dict) and "name" in item else item.get("symbol", "Desconhecido"),
+            "symbol": item["symbol"].upper() if isinstance(item, dict) and "symbol" in item else "Desconhecido",
+            "volatility": abs(item.get("price_change_percentage_24h", 0)) if isinstance(item, dict) else 0,
+            "price": item.get("current_price") if isinstance(item, dict) else 0
+        } for item in data])
         return df
-    return pd.DataFrame()
+    else:
+        return pd.DataFrame()  # Retorna um DataFrame vazio em caso de erro
 
-# -----------------------------
-# PAINEL DE VOLATILIDADE DAS CRIPTOS
-# -----------------------------
+# Função para exibir painel de criptomoedas
+def crypto_panel():
+    st.title("📉 Painel de Criptomoedas")
 
-st.subheader("📊 Volatilidade das Criptomoedas (últimas 24h)")
+    # Lista de criptomoedas com ativos específicos
+    crypto_assets = [
+        "BTC", "ETH", "DOGE", "XRP", "ADA", "SOL", "MATIC", "LTC", "DOT", "LINK", "XLM", "UNI",
+        "VET", "THETA", "SHIB", "AVAX", "ALGO", "FIL", "MANA", "HBAR"
+    ]
+    crypto_df = get_market_data(crypto_assets, asset_type="crypto")
 
-crypto_df = get_market_data(coins, asset_type="crypto")
-if not crypto_df.empty:
-    crypto_df_sorted = crypto_df.sort_values("volatility", ascending=False)
+    if not crypto_df.empty:
+        crypto_df_sorted = crypto_df.sort_values("volatility", ascending=False)
+        st.write("🔍 Criptomoedas mais voláteis:", crypto_df_sorted)
+    else:
+        st.error("Não foi possível carregar os dados das criptomoedas.")
 
-    fig_crypto_vol = go.Figure(go.Bar(
-        x=crypto_df_sorted["volatility"],
-        y=[f"{n} ({s})" for n, s in zip(crypto_df_sorted["name"], crypto_df_sorted["symbol"])],
-        orientation='h',
-        marker=dict(color='rgba(255,100,100,0.6)', line=dict(color='red', width=1.5))
-    ))
-    fig_crypto_vol.update_layout(
-        height=500,
-        xaxis_title="Variação percentual (absoluta) nas últimas 24h",
-        yaxis_title="Criptomoeda",
-        title="🔺 Ranking de Volatilidade Atual (Criptos)",
-        yaxis=dict(autorange="reversed")
-    )
-    st.plotly_chart(fig_crypto_vol, use_container_width=True)
+# Função para exibir painel de ações
+def stock_panel():
+    st.title("📊 Painel de Ações")
 
-    # -----------------------------
-    # TABELA DE DETALHES DE CRIPTOS
-    # -----------------------------
+    # Lista de ações com ativos específicos
+    stock_assets = [
+        "AAPL", "GOOG", "AMZN", "TSLA", "MSFT", "META", "NVDA", "NFLX", "BABA", "JPM", "DIS", "KO",
+        "WMT", "MCD", "XOM", "BA", "INTC", "F", "PEP", "CSCO"
+    ]
+    stock_df = get_market_data(stock_assets, asset_type="stock")
 
-    st.markdown("### 🧾 Detalhes dos Ativos Cripto (Valores em USD)")
-    crypto_df_sorted["volatility"] = crypto_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
-    crypto_df_sorted["price"] = crypto_df_sorted["price"].map(lambda x: f"${x:.4f}")
-    crypto_df_sorted["low_24h"] = crypto_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
-    crypto_df_sorted["high_24h"] = crypto_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
-    crypto_df_sorted["buy_suggestion"] = crypto_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
-    crypto_df_sorted["sell_suggestion"] = crypto_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
+    if not stock_df.empty:
+        stock_df_sorted = stock_df.sort_values("volatility", ascending=False)
+        st.write("📈 Ações mais voláteis:", stock_df_sorted)
+    else:
+        st.error("Não foi possível carregar os dados das ações.")
 
-    st.dataframe(
-        crypto_df_sorted[[
-            "name", "symbol", "volatility", "price",
-            "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
-        ]].rename(columns={
-            "name": "Nome",
-            "symbol": "Ticker",
-            "volatility": "Volatilidade (24h)",
-            "price": "Preço atual",
-            "low_24h": "Mín. do dia",
-            "high_24h": "Máx. do dia",
-            "buy_suggestion": "Sugestão de Compra",
-            "sell_suggestion": "Sugestão de Venda"
-        }),
-        use_container_width=True,
-        height=500
+# Função principal que alterna entre os painéis
+def main():
+    st.sidebar.title("Navegação")
+    option = st.sidebar.selectbox(
+        "Escolha o painel:",
+        ("Criptomoedas", "Ações")
     )
 
-# -----------------------------
-# PAINEL DE VOLATILIDADE DAS AÇÕES
-# -----------------------------
+    if option == "Criptomoedas":
+        crypto_panel()
+    elif option == "Ações":
+        stock_panel()
 
-st.subheader("📊 Volatilidade das Ações (últimas 24h)")
+if __name__ == "__main__":
+    main()
 
-stock_df = get_market_data(stocks, asset_type="stock")
-if not stock_df.empty:
-    stock_df_sorted = stock_df.sort_values("volatility", ascending=False)
+    elif option == "Ações":
+        stock_panel()
 
-    fig_stock_vol = go.Figure(go.Bar(
-        x=stock_df_sorted["volatility"],
-        y=[f"{n} ({s})" for n, s in zip(stock_df_sorted["name"], stock_df_sorted["symbol"])],
-        orientation='h',
-        marker=dict(color='rgba(100,100,255,0.6)', line=dict(color='blue', width=1.5))
-    ))
-    fig_stock_vol.update_layout(
-        height=500,
-        xaxis_title="Variação percentual (absoluta) nas últimas 24h",
-        yaxis_title="Ação",
-        title="🔺 Ranking de Volatilidade Atual (Ações)",
-        yaxis=dict(autorange="reversed")
-    )
-    st.plotly_chart(fig_stock_vol, use_container_width=True)
-
-    # -----------------------------
-    # TABELA DE DETALHES DE AÇÕES
-    # -----------------------------
-
-    st.markdown("### 🧾 Detalhes das Ações (Valores em USD)")
-    stock_df_sorted["volatility"] = stock_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
-    stock_df_sorted["price"] = stock_df_sorted["price"].map(lambda x: f"${x:.4f}")
-    stock_df_sorted["low_24h"] = stock_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
-    stock_df_sorted["high_24h"] = stock_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
-    stock_df_sorted["buy_suggestion"] = stock_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
-    stock_df_sorted["sell_suggestion"] = stock_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
-
-    st.dataframe(
-        stock_df_sorted[[
-            "name", "symbol", "volatility", "price",
-            "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
-        ]].rename(columns={
-            "name": "Nome",
-            "symbol": "Ticker",
-            "volatility": "Volatilidade (24h)",
-            "price": "Preço atual",
-            "low_24h": "Mín. do dia",
-            "high_24h": "Máx. do dia",
-            "buy_suggestion": "Sugestão de Compra",
-            "sell_suggestion": "Sugestão de Venda"
-        }),
-        use_container_width=True,
-        height=500
-    )
+if __name__ == "__main__":
+    main()
