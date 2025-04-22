@@ -2,30 +2,33 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.graph_objects as go
-import time
 from datetime import datetime
 
-st.set_page_config(page_title="TradeMaster AI", layout="wide")
+st.set_page_config(layout="wide")
+st.title("📈 TradeMaster AI – Assistente de Daytrade Cripto")
 
-st.title("📊 TradeMaster AI – Candlestick Cripto em Tempo Real")
+# Dicionário com os ativos
+coins = {
+    "Bitcoin (BTC)": "bitcoin",
+    "Ethereum (ETH)": "ethereum",
+    "Ripple (XRP)": "ripple",
+    "Dogecoin (DOGE)": "dogecoin",
+    "Litecoin (LTC)": "litecoin",
+    "Cardano (ADA)": "cardano",
+    "Polkadot (DOT)": "polkadot",
+    "Solana (SOL)": "solana",
+    "Avalanche (AVAX)": "avalanche-2",
+    "Chainlink (LINK)": "chainlink",
+    "Shiba Inu (SHIB)": "shiba-inu",
+    "Binance Coin (BNB)": "binancecoin",
+    "Polygon (MATIC)": "polygon",
+    "Uniswap (UNI)": "uniswap",
+    "Terra (LUNA)": "terra-luna"
+}
 
-# Inicializa variáveis de sessão
-if "prices" not in st.session_state:
-    st.session_state.prices = []
-
-# Seleção de moeda
-coin = st.selectbox("Escolha a Criptomoeda:", ["bitcoin", "ethereum", "solana", "dogecoin"])
-
-# Função para pegar o preço atual
-def get_price(coin):
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
-    r = requests.get(url)
-    if r.status_code == 200:
-        price = r.json()[coin]["usd"]
-        return price
-    return None
-
-st.subheader("📊 Volatilidade das Criptomoedas (24h)")
+# -----------------------------
+# VOLATILIDADE
+# -----------------------------
 
 @st.cache_data(ttl=60)
 def get_volatility_data():
@@ -41,6 +44,8 @@ def get_volatility_data():
         } for item in data])
     return pd.DataFrame()
 
+st.subheader("📊 Volatilidade das Criptomoedas (últimas 24h)")
+
 vol_df = get_volatility_data()
 vol_df_sorted = vol_df.sort_values("volatility", ascending=False)
 
@@ -50,7 +55,6 @@ fig_vol = go.Figure(go.Bar(
     orientation='h',
     marker=dict(color='rgba(255,100,100,0.6)', line=dict(color='red', width=1.5))
 ))
-
 fig_vol.update_layout(
     height=500,
     xaxis_title="Variação percentual (absoluta) nas últimas 24h",
@@ -58,43 +62,55 @@ fig_vol.update_layout(
     title="🔺 Ranking de Volatilidade Atual",
     yaxis=dict(autorange="reversed")
 )
-
 st.plotly_chart(fig_vol, use_container_width=True)
 
+# -----------------------------
+# ATIVO SELECIONADO
+# -----------------------------
 
-# Atualiza o histórico
-price = get_price(coin)
-if price:
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    st.session_state.prices.append({"time": timestamp, "price": price})
+st.subheader("📉 Análise do Ativo Selecionado")
 
-# Converte histórico para DataFrame
-df = pd.DataFrame(st.session_state.prices)
+selected_coin = st.selectbox("Escolha a criptomoeda", list(coins.keys()))
+coin_id = coins[selected_coin]
 
-# Agrupa dados por minuto (OHLC simulado)
-if len(df) >= 5:
-    df["time_dt"] = pd.to_datetime(df["time"], format="%H:%M:%S")
-    df.set_index("time_dt", inplace=True)
-    ohlc = df["price"].resample("1T").ohlc().dropna()
+@st.cache_data(ttl=60)
+def get_coin_data(coin_id):
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=minute"
+    r = requests.get(url)
+    if r.status_code == 200:
+        data = r.json()
+        return data
+    return None
 
-    # Gráfico candlestick
+data = get_coin_data(coin_id)
+
+if data and "prices" in data:
+    df = pd.DataFrame(data["prices"], columns=["timestamp", "price"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit='ms')
+    df["datetime"] = df["timestamp"].dt.strftime("%H:%M")
+
+    # Gerar candles (OHLC por minuto)
+    ohlc = df.set_index("timestamp").resample("1min").agg({
+        "price": ["first", "max", "min", "last"]
+    }).dropna()
+    ohlc.columns = ["open", "high", "low", "close"]
+    ohlc.reset_index(inplace=True)
+
     fig = go.Figure(data=[go.Candlestick(
-        x=ohlc.index,
+        x=ohlc["timestamp"],
         open=ohlc["open"],
         high=ohlc["high"],
         low=ohlc["low"],
-        close=ohlc["close"]
+        close=ohlc["close"],
+        name=selected_coin
     )])
-    fig.update_layout(title="Gráfico de Velas (Candlestick)", xaxis_title="Tempo", yaxis_title="Preço (USD)")
+    fig.update_layout(
+        title=f"📅 Gráfico Candle - {selected_coin}",
+        xaxis_title="Horário",
+        yaxis_title="Preço (USD)",
+        xaxis_rangeslider_visible=False,
+        height=600
+    )
     st.plotly_chart(fig, use_container_width=True)
-
 else:
-    st.info("Aguardando dados suficientes para montar o gráfico de velas...")
-
-# Exibe preço atual
-st.metric(label=f"Preço Atual de {coin.capitalize()}", value=f"${price}")
-
-# Aguarda e atualiza a cada 60 segundos
-st.write("🔄 Atualizando a cada 60 segundos...")
-time.sleep(60)
-st.experimental_rerun()
+    st.error("Erro ao carregar os dados da criptomoeda.")
