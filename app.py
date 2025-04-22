@@ -54,6 +54,8 @@ atualizar = st.button("🔄 Atualizar Dados")
 # --- Tab 1: Sugestões de Operações com Candles ---
 with tab1:
     st.subheader(f"Sugestões de Compra/Venda ({periodo})")
+    
+    # Criar lista para armazenar dados
     df_all = []
     figs_bar = {}
     figs_candle = {}
@@ -69,7 +71,7 @@ with tab1:
         prec_atual = float(dados["Close"].iloc[-1])
         pot = (prec_max - prec_atual) / prec_atual * 100
 
-        # guarda na tabela
+        # Adicionar dados na lista
         df_all.append({
             "Ativo": nome,
             "Preço Ideal 🟢": f"R$ {prec_min:.2f}",
@@ -104,15 +106,20 @@ with tab1:
         )
         figs_candle[nome] = figc
 
-    # tabela geral
-    df_sug = pd.DataFrame(df_all)
-    st.dataframe(df_sug, use_container_width=True)
+    # Verificando se df_all não está vazio
+    if df_all:
+        df_sug = pd.DataFrame(df_all)
 
-    # expanders com barras e candles
-    for nm in df_sug["Ativo"]:
-        with st.expander(f"{nm}"):
-            st.pyplot(figs_bar[nm])
-            st.pyplot(figs_candle[nm])
+        # tabela geral
+        st.dataframe(df_sug, use_container_width=True)
+
+        # expanders com barras e candles
+        for nm in df_sug["Ativo"]:
+            with st.expander(f"{nm}"):
+                st.pyplot(figs_bar[nm])
+                st.pyplot(figs_candle[nm])
+    else:
+        st.warning("Não foi possível carregar os dados de nenhum ativo. Tente novamente mais tarde.")
 
 # --- Tab 2: Simulação & Backtest (permanece igual) ---
 with tab2:
@@ -162,9 +169,4 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Rodapé com timestamp ---
-st.markdown(
-    f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H:%M:%S')}</small></div>",
-    unsafe_allow_html=True
-)
 
