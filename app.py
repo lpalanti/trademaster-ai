@@ -45,8 +45,10 @@ def obter_dados(codigo, start, end, interval="3m"):
     except Exception:
         return pd.DataFrame()
 
-# --- Aba de Sugestões de Operações ---
+# --- Abas ---
 tab1, tab2 = st.tabs(["💡 Sugestões", "🛠 Simulação & Backtest"])
+
+# --- Tab 1: Sugestões de Operações ---
 with tab1:
     st.subheader(f"Sugestões de Compra/Venda ({periodo})")
     df_all = []
@@ -88,10 +90,11 @@ with tab1:
         with st.expander(f"Gráfico: {nm}"):
             st.pyplot(fg)
 
+# --- Tab 2: Simulação & Backtest ---
 with tab2:
     st.subheader(f"Simulação & Backtest ({periodo})")
 
-    # Simulação básica: compra na abertura do período e venda no fechamento
+    # Dados do ativo selecionado
     df = obter_dados(ativo_codigo, inicio, fim)
     # Garante valores numéricos
     if not df.empty:
@@ -102,7 +105,7 @@ with tab2:
         exit_price = 0.0
     pnl = exit_price - entry
 
-    # Backtest últimas 24h: compra no min, venda no max
+    # Backtest últimas 24h
     inicio24 = fim - datetime.timedelta(hours=24)
     df24 = obter_dados(ativo_codigo, inicio24, fim, interval="15m")
     if not df24.empty:
@@ -112,10 +115,10 @@ with tab2:
         min24 = max24 = 0.0
     pnl24 = max24 - min24
 
-    # Monta histórico de trades
+    # Histórico de trades
     historico = [
-        {"Período":"Simulado","Entry (R$)":entry,"Exit (R$)":exit_price,"P&L (R$)":pnl},
-        {"Período":"Backtest 24h","Entry (R$)":min24,"Exit (R$)":max24,"P&L (R$)":pnl24}
+        {"Período":"Simulado",   "Entry (R$)": entry,     "Exit (R$)": exit_price, "P&L (R$)": pnl},
+        {"Período":"Backtest 24h","Entry (R$)": min24,    "Exit (R$)": max24,      "P&L (R$)": pnl24}
     ]
     hist_df = pd.DataFrame(historico)
 
@@ -128,9 +131,14 @@ with tab2:
     st.dataframe(hist_df, use_container_width=True)
 
     # Download CSV
-    csv = hist_df.to_csv(index=False).encode('utf-8')
+    csv = hist_df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="📥 Baixar histórico (CSV)",
         data=csv,
         file_name="trade_history.csv",
-        mime="
+        mime="text/csv"
+    )
+
+# --- Rodapé com timestamp ---
+st.markdown(
+    f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H
