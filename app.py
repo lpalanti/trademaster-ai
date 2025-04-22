@@ -103,4 +103,4 @@ if __name__ == "__main__":
 import subprocess
 
 subprocess.run(["pip", "uninstall", "numpy", "-y"])
-pip show numpy
+
