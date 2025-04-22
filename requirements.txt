@@ -7,3 +7,4 @@ plotly
 pandas_ta
 setuptools
 numpy
+pip install -r requirements.txt
