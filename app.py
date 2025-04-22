@@ -31,8 +31,8 @@ ativo_nome = st.selectbox("Selecione o ativo:", list(ativos.keys()))
 ativo_codigo = ativos[ativo_nome]
 
 # Escolha de período dinâmico
-periodo = st.selectbox("Período de análise:", ["1h","3h","6h","12h"])
-horas = int(periodo.replace("h",""))
+periodo = st.selectbox("Período de análise:", ["1h", "3h", "6h", "12h"])
+horas = int(periodo.replace("h", ""))
 fim = datetime.datetime.now()
 inicio = fim - datetime.timedelta(hours=horas)
 
@@ -73,9 +73,9 @@ with tab1:
         # gráfico de barras
         fig, ax = plt.subplots()
         bars = ax.bar(
-            ["Compra","Venda","Atual"],
-            [prec_min,prec_max,prec_atual],
-            color=["#4CAF50","#F44336","#9E9E9E"]
+            ["Compra", "Venda", "Atual"],
+            [prec_min, prec_max, prec_atual],
+            color=["#4CAF50", "#F44336", "#9E9E9E"]
         )
         ax.bar_label(bars, fmt="R$ %.2f")
         ax.set_title(nome, color="white")
@@ -96,7 +96,6 @@ with tab2:
 
     # Dados do ativo selecionado
     df = obter_dados(ativo_codigo, inicio, fim)
-    # Garante valores numéricos
     if not df.empty:
         entry = float(df["Close"].iloc[0])
         exit_price = float(df["Close"].iloc[-1])
@@ -112,13 +111,14 @@ with tab2:
         min24 = float(df24["Close"].min())
         max24 = float(df24["Close"].max())
     else:
-        min24 = max24 = 0.0
+        min24 = 0.0
+        max24 = 0.0
     pnl24 = max24 - min24
 
     # Histórico de trades
     historico = [
-        {"Período":"Simulado",   "Entry (R$)": entry,     "Exit (R$)": exit_price, "P&L (R$)": pnl},
-        {"Período":"Backtest 24h","Entry (R$)": min24,    "Exit (R$)": max24,      "P&L (R$)": pnl24}
+        {"Período": "Simulado", "Entry (R$)": entry, "Exit (R$)": exit_price, "P&L (R$)": pnl},
+        {"Período": "Backtest 24h", "Entry (R$)": min24, "Exit (R$)": max24, "P&L (R$)": pnl24}
     ]
     hist_df = pd.DataFrame(historico)
 
@@ -128,17 +128,3 @@ with tab2:
     col2.metric("P&L Backtest 24h", f"R$ {pnl24:.2f}", delta=f"R$ {pnl24:.2f}")
 
     st.markdown("**Histórico de Trades**")
-    st.dataframe(hist_df, use_container_width=True)
-
-    # Download CSV
-    csv = hist_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="📥 Baixar histórico (CSV)",
-        data=csv,
-        file_name="trade_history.csv",
-        mime="text/csv"
-    )
-
-# --- Rodapé com timestamp ---
-st.markdown(
-    f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H
