@@ -1,74 +1,87 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+from time import sleep
 
 st.set_page_config(page_title="TradeMaster AI", layout="wide")
-st.title("📈 TradeMaster AI")
-st.subheader("Sugestões inteligentes de ativos com base nos dados do dia")
 
-st.markdown("---")
-st.markdown("🔍 *Informe os ativos que deseja analisar (ex: PETR4.SA, VALE3.SA, AAPL)*")
+st.title("📈 TradeMaster AI – Sugeridor de Ativos Inteligente")
+st.markdown("**Análise com base nas últimas 3 horas e desempenho do dia**")
 
-tickers_input = st.text_input("Ativos separados por vírgula", "PETR4.SA, VALE3.SA, AAPL")
+# Lista de 50 ativos populares 🇧🇷🇺🇸
+tickers = [
+    # BR
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA",
+    "MGLU3.SA", "WEGE3.SA", "RENT3.SA", "B3SA3.SA", "LREN3.SA",
+    "ABEV3.SA", "RADL3.SA", "JBSS3.SA", "RAIL3.SA", "GGBR4.SA",
+    "BRFS3.SA", "ELET3.SA", "EMBR3.SA", "CSNA3.SA", "CYRE3.SA",
+    "UGPA3.SA", "CCRO3.SA", "CMIG4.SA", "ENBR3.SA", "HAPV3.SA",
+    # EUA
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
+    "META", "NVDA", "NFLX", "INTC", "AMD",
+    "BAC", "JPM", "WMT", "DIS", "PEP",
+    "NKE", "T", "KO", "PFE", "BA",
+    "C", "XOM", "CVX", "MRNA", "ADBE"
+]
 
-if tickers_input:
-    tickers = [t.strip().upper() for t in tickers_input.split(",")]
-    
-    agora = datetime.now()
-    hoje = agora.strftime('%Y-%m-%d')
+# Timezone correto
+br_tz = pytz.timezone('America/Sao_Paulo')
+agora = datetime.now(br_tz)
+inicio = agora - timedelta(hours=3)
 
-    @st.cache_data(ttl=300)
-    def analisar_ativo(ticker):
-        try:
-            ativo = yf.Ticker(ticker)
-            df = ativo.history(interval="15m", start=hoje)
-            df.dropna(inplace=True)
+@st.cache_data(ttl=300)
+def analisar_ativo(ticker):
+    try:
+        dados = yf.download(ticker, interval="5m", period="1d", progress=False)
 
-            if df.empty or len(df) < 2:
-                return {
-                    'Ativo': ticker,
-                    'Erro': 'Sem dados suficientes para análise'
-                }
+        if dados.empty:
+            return None
 
-            preco_atual = df['Close'].iloc[-1]
-            preco_max = df['High'].max()
-            preco_min = df['Low'].min()
-            variacao = ((df['Close'].iloc[-1] - df['Open'].iloc[0]) / df['Open'].iloc[0]) * 100
+        dados = dados.dropna()
+        dados_3h = dados[dados.index >= inicio]
 
-            return {
-                'Ativo': ticker,
-                'Preço Atual': round(preco_atual, 2),
-                'Melhor Preço de Venda': round(preco_max, 2),
-                'Melhor Preço de Compra': round(preco_min, 2),
-                'Variação (%)': round(variacao, 2)
-            }
-        except Exception as e:
-            return {
-                'Ativo': ticker,
-                'Erro': str(e)
-            }
+        if dados_3h.empty:
+            return None
 
-    with st.spinner("🔎 Analisando ativos..."):
-        analises = [analisar_ativo(t) for t in tickers]
-        df_resultado = pd.DataFrame(analises)
+        preco_atual = dados_3h["Close"][-1]
+        preco_inicio = dados_3h["Close"][0]
+        variacao = ((preco_atual - preco_inicio) / preco_inicio) * 100
 
-        if 'Variação (%)' in df_resultado.columns:
-            df_validos = df_resultado[df_resultado['Variação (%)'].notnull()]
-        else:
-            df_validos = pd.DataFrame()
+        melhor_compra = dados_3h["Low"].min()
+        melhor_venda = dados_3h["High"].max()
 
-    st.markdown("---")
-    
-    if not df_validos.empty:
-        st.success("✅ Ativos analisados com sucesso! Veja os resultados abaixo:")
-        st.dataframe(df_validos.sort_values("Variação (%)", ascending=False), use_container_width=True)
-    else:
-        st.warning("⚠️ Não foi possível obter dados válidos para os ativos informados.")
+        return {
+            "Ativo": ticker,
+            "Preço Atual": round(preco_atual, 2),
+            "Variação (%)": round(variacao, 2),
+            "Melhor Compra": round(melhor_compra, 2),
+            "Melhor Venda": round(melhor_venda, 2)
+        }
 
-    if 'Erro' in df_resultado.columns:
-        erros = df_resultado[df_resultado['Erro'].notnull()]
-        if not erros.empty:
-            with st.expander("❌ Ativos com erro de carregamento"):
-                st.dataframe(erros[['Ativo', 'Erro']])
+    except Exception as e:
+        return None
+
+# 🔄 Análise com barra de progresso
+st.info("Analisando ativos, isso pode levar alguns segundos...")
+analises = []
+with st.spinner("🔍 Coletando dados..."):
+    for i, ticker in enumerate(tickers):
+        resultado = analisar_ativo(ticker)
+        if resultado:
+            analises.append(resultado)
+        st.progress((i + 1) / len(tickers))
+        sleep(0.05)
+
+# ✅ Resultados
+if analises:
+    df_resultado = pd.DataFrame(analises)
+    df_validos = df_resultado[df_resultado['Variação (%)'].notnull()]
+    top10 = df_validos.sort_values("Variação (%)", ascending=False).head(10)
+
+    st.success("✅ Top 10 ativos com melhor desempenho nas últimas 3 horas:")
+    st.dataframe(top10.reset_index(drop=True), use_container_width=True)
+else:
+    st.error("Nenhum dado disponível no momento. Tente novamente mais tarde.")
 
