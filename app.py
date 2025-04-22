@@ -1,61 +1,140 @@
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 import pandas as pd
-import random
+import requests
+import yfinance as yf
+from datetime import datetime
 
-# Atualiza a cada 3 minutos (180.000 ms)
-st_autorefresh(interval=180000, key="refresh")
+st.set_page_config(page_title="Painel Day Trade", layout="wide")
+st.title("📊 Painel de Day Trade - Cripto, Ações e Commodities")
+st.caption("Atualização manual ou a cada 3 minutos via cache.")
 
-st.set_page_config(page_title="SIFUT | Day Trade", layout="wide")
-st.title("SIFUT - Sistema de Informações para Day Trade")
+# Sidebar de navegação
+opcao = st.sidebar.radio("Selecione o Painel:", ["Cripto", "Ações", "Commodities"])
 
-# Botões de navegação
-page = st.sidebar.radio("Escolha a área:", ["Cripto", "Ações", "Commodities"])
+# CRIPTO: via CoinGecko
+def obter_dados_cripto():
+    ids = "bitcoin,ethereum,ripple,dogecoin,litecoin,cardano,polkadot,solana,avalanche,chainlink,shiba-inu,binancecoin,polygon,uniswap,terra-luna"
+    url = f"https://api.coingecko.com/api/v3/coins/markets"
+    params = {
+        "vs_currency": "usd",
+        "ids": ids,
+    }
+    r = requests.get(url, params=params)
+    data = r.json()
 
-# Função para simular dados (você vai substituir por API real depois)
-def gerar_dados(ativos):
-    data = []
-    for ativo in ativos:
-        preco_min = round(random.uniform(10, 100), 2)
-        preco_max = round(preco_min + random.uniform(5, 20), 2)
-        preco_ideal_compra = round((preco_min + preco_max) / 2 - random.uniform(0.5, 2), 2)
-        preco_ideal_venda = round((preco_min + preco_max) / 2 + random.uniform(0.5, 2), 2)
-        volatilidade = round(preco_max - preco_min, 2)
-        volatilidade_pct = round((volatilidade / preco_min) * 100, 2)
-
-        data.append({
-            "Ativo": ativo,
-            "Volatilidade": volatilidade,
-            "% Volatilidade": f"{volatilidade_pct}%",
-            "Menor Preço": preco_min,
-            "Maior Preço": preco_max,
-            "Preço Ideal de Compra": preco_ideal_compra,
-            "Preço Ideal de Venda": preco_ideal_venda,
+    rows = []
+    for c in data:
+        vol = round(c['high_24h'] - c['low_24h'], 2)
+        pct = round((vol / c['low_24h']) * 100, 2) if c['low_24h'] else 0
+        rows.append({
+            "Ativo": f"{c['name']} ({c['symbol'].upper()})",
+            "Volatilidade": vol,
+            "% Volatilidade": f"{pct}%",
+            "Menor Preço": f"${c['low_24h']:.2f}",
+            "Maior Preço": f"${c['high_24h']:.2f}",
+            "Preço Ideal de Compra": f"${c['low_24h']:.2f}",
+            "Preço Ideal de Venda": f"${c['high_24h']:.2f}"
         })
-    return pd.DataFrame(data)
 
-# Dicionário de ativos
-ativos_dict = {
-    "Cripto": [
-        "Bitcoin (BTC)", "Ethereum (ETH)", "Ripple (XRP)", "Dogecoin (DOGE)", "Litecoin (LTC)", 
-        "Cardano (ADA)", "Polkadot (DOT)", "Solana (SOL)", "Avalanche (AVAX)", "Chainlink (LINK)",
-        "Shiba Inu (SHIB)", "Binance Coin (BNB)", "Polygon (MATIC)", "Uniswap (UNI)", "Terra (LUNA)"
-    ],
-    "Ações": [
-        "Tesla (TSLA)", "Amazon (AMZN)", "Apple (AAPL)", "Meta (META)", "Netflix (NFLX)", "Nvidia (NVDA)",
-        "GameStop (GME)", "AMC Entertainment (AMC)", "Spotify (SPOT)", "Palantir (PLTR)", "Roku (ROKU)",
-        "Square (SQ)", "Zoom Video (ZM)", "DocuSign (DOCU)", "Beyond Meat (BYND)", "Coinbase (COIN)",
-        "Robinhood (HOOD)", "Moderna (MRNA)", "Snowflake (SNOW)", "Spotify (SPOT)"
-    ],
-    "Commodities": [
-        "Ouro (XAU/USD)", "Petróleo Brent", "Petróleo WTI", "Cobre (Copper)", "Algodão (Cotton)",
-        "Café (Coffee)", "Soja (Soybeans)", "Milho (Corn)", "Açúcar (Sugar)", "Paládio (Palladium)"
-    ]
-}
+    return pd.DataFrame(rows)
 
-# Gera dados para a página escolhida
-df = gerar_dados(ativos_dict[page])
+# AÇÕES: via Alpha Vantage
+def obter_dados_acoes():
+    API_KEY = "IOKSXPMXJXFIKTI3"
+    tickers = ['TSLA', 'AMZN', 'AAPL', 'META', 'NFLX', 'NVDA', 'GME', 'AMC', 'SPOT', 'PLTR', 'ROKU', 'SQ', 'ZM', 'DOCU', 'BYND', 'COIN', 'HOOD', 'MRNA', 'SNOW']
+    resultados = []
 
-# Exibição dos dados
-st.subheader(f"Painel de Monitoramento - {page}")
-st.dataframe(df, use_container_width=True)
+    for t in tickers:
+        url = "https://www.alphavantage.co/query"
+        params = {
+            "function": "TIME_SERIES_DAILY",
+            "symbol": t,
+            "apikey": API_KEY
+        }
+        r = requests.get(url, params=params)
+        data = r.json()
+
+        try:
+            series = data["Time Series (Daily)"]
+            ultimos = list(series.values())[:2]
+            atual = ultimos[0]
+            anterior = ultimos[1]
+
+            minimo = float(atual["3. low"])
+            maximo = float(atual["2. high"])
+            vol = round(maximo - minimo, 2)
+            pct = round((vol / minimo) * 100, 2) if minimo else 0
+
+            resultados.append({
+                "Ativo": t,
+                "Volatilidade": vol,
+                "% Volatilidade": f"{pct}%",
+                "Menor Preço": f"${minimo:.2f}",
+                "Maior Preço": f"${maximo:.2f}",
+                "Preço Ideal de Compra": f"${minimo:.2f}",
+                "Preço Ideal de Venda": f"${maximo:.2f}",
+            })
+        except:
+            continue
+
+    return pd.DataFrame(resultados)
+
+# COMMODITIES: via yfinance
+def obter_dados_commodities():
+    ativos = {
+        "Ouro": "XAUUSD=X",
+        "Brent": "BZ=F",
+        "WTI": "CL=F",
+        "Cobre": "HG=F",
+        "Algodão": "CT=F",
+        "Café": "KC=F",
+        "Soja": "ZS=F",
+        "Milho": "ZC=F",
+        "Açúcar": "SB=F",
+        "Paládio": "PA=F",
+    }
+
+    resultados = []
+
+    for nome, ticker in ativos.items():
+        try:
+            df = yf.download(ticker, period="1d", interval="1h", progress=False)
+            if df.empty:
+                continue
+            minimo = df["Low"].min()
+            maximo = df["High"].max()
+            vol = round(maximo - minimo, 2)
+            pct = round((vol / minimo) * 100, 2) if minimo else 0
+
+            resultados.append({
+                "Ativo": nome,
+                "Volatilidade": vol,
+                "% Volatilidade": f"{pct}%",
+                "Menor Preço": f"${minimo:.2f}",
+                "Maior Preço": f"${maximo:.2f}",
+                "Preço Ideal de Compra": f"${minimo:.2f}",
+                "Preço Ideal de Venda": f"${maximo:.2f}",
+            })
+        except:
+            continue
+
+    return pd.DataFrame(resultados)
+
+# Mostra o painel certo
+if opcao == "Cripto":
+    st.subheader("🪙 Criptomoedas")
+    df = obter_dados_cripto()
+    st.dataframe(df, use_container_width=True)
+
+elif opcao == "Ações":
+    st.subheader("📈 Ações")
+    df = obter_dados_acoes()
+    st.dataframe(df, use_container_width=True)
+
+elif opcao == "Commodities":
+    st.subheader("🌾 Commodities")
+    df = obter_dados_commodities()
+    st.dataframe(df, use_container_width=True)
+
+# Rodapé
+st.caption(f"Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
