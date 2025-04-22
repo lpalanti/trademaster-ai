@@ -1,87 +1,81 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timedelta
-import pytz
-from time import sleep
+import time
 
-st.set_page_config(page_title="TradeMaster AI", layout="wide")
+# Função para obter os dados financeiros de um ativo
+def obter_dados_ativos(ativos):
+    dados = []
+    for ativo in ativos:
+        try:
+            df = yf.download(ativo, period="1d", interval="5m")  # Obtém dados das últimas 3 horas
+            df['Ativo'] = ativo  # Adiciona o nome do ativo
+            dados.append(df)
+            time.sleep(0.15)  # Aumento do tempo de espera entre as requisições para evitar rate limit
+        except (yf.YFRateLimitError, yf.YFPricesMissingError) as e:
+            st.warning(f"Erro ao obter dados de {ativo}: {e}")
+            continue
+    return dados
 
-st.title("📈 TradeMaster AI – Sugeridor de Ativos Inteligente")
-st.markdown("**Análise com base nas últimas 3 horas e desempenho do dia**")
-
-# Lista de 50 ativos populares 🇧🇷🇺🇸
-tickers = [
-    # BR
-    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA",
-    "MGLU3.SA", "WEGE3.SA", "RENT3.SA", "B3SA3.SA", "LREN3.SA",
-    "ABEV3.SA", "RADL3.SA", "JBSS3.SA", "RAIL3.SA", "GGBR4.SA",
-    "BRFS3.SA", "ELET3.SA", "EMBR3.SA", "CSNA3.SA", "CYRE3.SA",
-    "UGPA3.SA", "CCRO3.SA", "CMIG4.SA", "ENBR3.SA", "HAPV3.SA",
-    # EUA
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
-    "META", "NVDA", "NFLX", "INTC", "AMD",
-    "BAC", "JPM", "WMT", "DIS", "PEP",
-    "NKE", "T", "KO", "PFE", "BA",
-    "C", "XOM", "CVX", "MRNA", "ADBE"
+# Lista de 50 ativos populares
+ativos_populares = [
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'BRK-B', 'V', 'MA',
+    'JPM', 'UNH', 'HD', 'DIS', 'PYPL', 'NFLX', 'BABA', 'INTC', 'AMD', 'BA',
+    'CSCO', 'WMT', 'KO', 'PFE', 'VZ', 'PEP', 'ABT', 'MRK', 'CVX', 'XOM',
+    'GS', 'C', 'JNJ', 'T', 'MCD', 'WFC', 'NKE', 'PG', 'ADBE', 'ORCL',
+    'SBUX', 'TSM', 'GE', 'UPS', 'RTX', 'LMT', 'GM', 'X', 'CAT', 'GM',
+    'LUV', 'UAL', 'SPY', 'IWM', 'QQQ', 'DIA'
 ]
 
-# Timezone correto
-br_tz = pytz.timezone('America/Sao_Paulo')
-agora = datetime.now(br_tz)
-inicio = agora - timedelta(hours=3)
+# Divisão dos ativos em lotes (25 por vez)
+lotes_ativos = [ativos_populares[i:i+25] for i in range(0, len(ativos_populares), 25)]
 
-@st.cache_data(ttl=300)
-def analisar_ativo(ticker):
-    try:
-        dados = yf.download(ticker, interval="5m", period="1d", progress=False)
+# Coleta os dados de todos os ativos
+todos_dados = []
+for lote in lotes_ativos:
+    dados_lote = obter_dados_ativos(lote)
+    todos_dados.extend(dados_lote)
 
-        if dados.empty:
-            return None
+# Concatena todos os dados coletados em um único DataFrame
+df_resultado = pd.concat(todos_dados)
 
-        dados = dados.dropna()
-        dados_3h = dados[dados.index >= inicio]
-
-        if dados_3h.empty:
-            return None
-
-        preco_atual = dados_3h["Close"][-1]
-        preco_inicio = dados_3h["Close"][0]
-        variacao = ((preco_atual - preco_inicio) / preco_inicio) * 100
-
-        melhor_compra = dados_3h["Low"].min()
-        melhor_venda = dados_3h["High"].max()
-
-        return {
-            "Ativo": ticker,
-            "Preço Atual": round(preco_atual, 2),
-            "Variação (%)": round(variacao, 2),
-            "Melhor Compra": round(melhor_compra, 2),
-            "Melhor Venda": round(melhor_venda, 2)
-        }
-
-    except Exception as e:
-        return None
-
-# 🔄 Análise com barra de progresso
-st.info("Analisando ativos, isso pode levar alguns segundos...")
-analises = []
-with st.spinner("🔍 Coletando dados..."):
-    for i, ticker in enumerate(tickers):
-        resultado = analisar_ativo(ticker)
-        if resultado:
-            analises.append(resultado)
-        st.progress((i + 1) / len(tickers))
-        sleep(0.05)
-
-# ✅ Resultados
-if analises:
-    df_resultado = pd.DataFrame(analises)
-    df_validos = df_resultado[df_resultado['Variação (%)'].notnull()]
-    top10 = df_validos.sort_values("Variação (%)", ascending=False).head(10)
-
-    st.success("✅ Top 10 ativos com melhor desempenho nas últimas 3 horas:")
-    st.dataframe(top10.reset_index(drop=True), use_container_width=True)
+# Exibe o DataFrame com os dados
+if not df_resultado.empty:
+    st.write("Dados das Ações", df_resultado.tail())
 else:
-    st.error("Nenhum dado disponível no momento. Tente novamente mais tarde.")
+    st.write("Nenhum dado encontrado para os ativos selecionados.")
+
+# Filtra os ativos válidos com base na variação
+df_validos = df_resultado[df_resultado['Adj Close'].notnull()]
+df_validos['Variação (%)'] = df_validos.groupby('Ativo')['Adj Close'].pct_change() * 100
+
+# Exibe os ativos com a maior variação
+ativos_com_maior_variacao = df_validos.groupby('Ativo')['Variação (%)'].last().sort_values(ascending=False).head(10)
+
+# Exibe os ativos recomendados
+st.write("Ativos com Maior Variação (%) nas Últimas 3 Horas", ativos_com_maior_variacao)
+
+# Sugestão de compra e venda
+ativos_com_maior_variacao_excluidos = ativos_com_maior_variacao.index.tolist()
+df_validos = df_validos[df_validos['Ativo'].isin(ativos_com_maior_variacao_excluidos)]
+
+# Função para calcular o preço de compra e venda
+def obter_precos(df):
+    precos = {}
+    for ativo in df['Ativo'].unique():
+        df_ativo = df[df['Ativo'] == ativo]
+        preco_compra = df_ativo['Low'].min()  # Menor preço de venda
+        preco_venda = df_ativo['High'].max()  # Maior preço de venda
+        precos[ativo] = {'Compra': preco_compra, 'Venda': preco_venda}
+    return precos
+
+# Exibindo os preços de compra e venda
+precos = obter_precos(df_validos)
+st.write("Sugestões de Preço de Compra e Venda", precos)
+
+# Exibe informações de cada ativo
+st.write("Informações Detalhadas de Ativos")
+for ativo, preco in precos.items():
+    st.write(f"**{ativo}**: Compra: {preco['Compra']:.2f} | Venda: {preco['Venda']:.2f}")
+
 
