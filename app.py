@@ -62,16 +62,13 @@ def get_market_data(assets, asset_type="crypto"):
     r = requests.get(url)
     if r.status_code == 200:
         data = r.json()
-        df = pd.DataFrame([{
-            "name": item.get("name", item.get("symbol")),
-            "symbol": item.get("symbol").upper(),
-            "volatility": abs(item.get("price_change_percentage_24h", 0) if asset_type == "crypto" else item.get("percent_change", 0)),
-            "price": item.get("current_price") if asset_type == "crypto" else item.get("close", 0),
-            "low_24h": item.get("low_24h", item.get("low", 0)),
-            "high_24h": item.get("high_24h", item.get("high", 0)),
-            "buy_suggestion": round(item.get("current_price", 0) * 0.95, 4) if asset_type == "crypto" else round(item.get("close", 0) * 0.95, 4),
-            "sell_suggestion": round(item.get("current_price", 0) * 1.05, 4) if asset_type == "crypto" else round(item.get("close", 0) * 1.05, 4)
-        } for item in data])
+       df = pd.DataFrame([{
+    # Verificando se 'item' é um dicionário e se contém as chaves necessárias
+    "name": item["name"] if isinstance(item, dict) and "name" in item else item.get("symbol", "Desconhecido"),
+    "symbol": item["symbol"].upper() if isinstance(item, dict) and "symbol" in item else "Desconhecido",
+    "volatility": abs(item.get("price_change_percentage_24h", 0)) if isinstance(item, dict) else 0,
+    "price": item.get("current_price") if isinstance(item, dict) else 0
+} for item in data])
         
         # Verificando se a coluna 'volatility' foi criada corretamente
         if "volatility" not in df.columns:
