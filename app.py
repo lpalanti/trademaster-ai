@@ -99,7 +99,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-pip uninstall numpy -y
-pip install numpy
-pip uninstall pandas_ta -y
-pip install pandas_ta
+
+import subprocess
+
+subprocess.run(["pip", "uninstall", "numpy", "-y"])
