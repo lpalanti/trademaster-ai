@@ -67,7 +67,7 @@ def get_commodities_data():
 # Página Inicial
 st.title('Day Trade Dashboard')
 
-# Botões
+# Botões de navegação
 selected_option = st.radio("Escolha o tipo de mercado:", ("Day Trade Cripto", "Day Trade Ações", "Day Trade Commodities"))
 
 # Exibição dos dados de Cripto
