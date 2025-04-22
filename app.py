@@ -6,115 +6,117 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="TradeMasterAI", layout="wide")
 
+# Estilo preto e branco
 st.markdown("""
     <style>
-    body {
-        background-color: black;
-        color: white;
-    }
-    .stApp {
-        background-color: black;
-        color: white;
-    }
-    .css-18e3th9 {
-        background-color: black;
-        color: white;
-    }
-    .stDataFrame, .stMetric {
-        background-color: #111;
-        color: white;
-    }
-    .css-1d391kg input {
-        background-color: #333;
-        color: white;
-    }
+    body {background-color: black; color: white;}
+    .stApp {background-color: black; color: white;}
+    .css-18e3th9 {background-color: black; color: white;}
+    .stDataFrame, .stMetric {background-color: #111; color: white;}
+    .css-1d391kg input {background-color: #333; color: white;}
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📈 TradeMasterAI - Painel de Simulação Day Trade")
-st.markdown("Dados reais dos ativos | Atualiza a cada 3 minutos")
+st.markdown("**Dados reais dos ativos | Atualiza a cada 3 minutos**")
 
-# Lista de ativos disponíveis
+# Seleção de ativos
 ativos = {
     "Bitcoin (BTC-USD)": "BTC-USD",
     "Mini Índice (WIN=F)": "WIN=F",
-    "Petrobras (PETR4.SA)": "PETR4.SA"
+    "Petrobras (PETR4.SA)": "PETR4.SA",
+    "Vale (VALE3.SA)": "VALE3.SA",
+    "Apple (AAPL)": "AAPL",
+    "Tesla (TSLA)": "TSLA"
 }
-
-ativo_nome = st.selectbox("Selecione o ativo para visualizar:", list(ativos.keys()))
+ativo_nome = st.selectbox("Selecione o ativo:", list(ativos.keys()))
 ativo_codigo = ativos[ativo_nome]
 
-# Intervalo dos dados (últimas 3 horas)
+# Seleção de período de análise
+periodos = {"1 hora":1, "3 horas":3, "6 horas":6, "12 horas":12}
+periodo_nome = st.selectbox("Selecionar período de análise:", list(periodos.keys()), index=1)
+periodo_horas = periodos[periodo_nome]
+
+# Definir intervalo de tempo
 fim = datetime.datetime.now()
-inicio = fim - datetime.timedelta(hours=3)
+inicio = fim - datetime.timedelta(hours=periodo_horas)
 
-# Função para calcular sugestão de compra e venda
+# Função de sugestão com cache
 @st.cache_data(show_spinner=False)
-def sugestao_operacoes(ativo_dict):
-    sugestoes = []
-    graficos = {}
-    for nome, codigo in ativo_dict.items():
-        dados = yf.download(tickers=codigo, start=inicio, end=fim, interval="3m")
-        if not dados.empty:
-            preco_minimo = dados['Close'].min()
-            preco_maximo = dados['Close'].max()
-            preco_atual = dados['Close'].iloc[-1]
-            sugestoes.append({
-                "Ativo": nome,
-                "Preço Ideal para Compra": f"R$ {preco_minimo:.2f}",
-                "Preço Ideal para Venda": f"R$ {preco_maximo:.2f}",
-                "Preço Atual": f"R$ {preco_atual:.2f}"
-            })
+def obter_dados(codigo, start, end):
+    df = yf.download(tickers=codigo, start=start, end=end, interval="3m")
+    return df
 
-            # Preparar gráfico
-            fig, ax = plt.subplots()
-            barras = ax.bar(["Compra", "Venda", "Atual"], [preco_minimo, preco_maximo, preco_atual], color=["green", "red", "gray"])
-            ax.set_title(f"{nome}")
-            ax.set_ylabel("Preço (R$)")
-            ax.bar_label(barras, fmt='%.2f')
-            graficos[nome] = fig
+# Coleta dados de todos os ativos para sugestões
+sugestoes = []
+graficos = {}
+for nome, codigo in ativos.items():
+    dados = obter_dados(codigo, inicio, fim)
+    if not dados.empty:
+        minimo = dados['Close'].min()
+        maximo = dados['Close'].max()
+        atual = dados['Close'].iloc[-1]
+        sugestoes.append({
+            "Ativo": nome,
+            "Preço Compra": f"R$ {minimo:.2f}",
+            "Preço Venda": f"R$ {maximo:.2f}",
+            "Preço Atual": f"R$ {atual:.2f}",
+            "% Potencial": f"{(maximo-minimo)/minimo*100:.2f}%"
+        })
+        # Gráfico de barras
+        fig, ax = plt.subplots()
+        barras = ax.bar(["Compra","Venda","Atual"], [minimo, maximo, atual], color=["#00B050","#F03C3C","#AAAAAA"])
+        ax.set_title(nome)
+        ax.set_ylabel("Preço (R$)")
+        ax.bar_label(barras, fmt='%.2f')
+        graficos[nome] = fig
 
-    return pd.DataFrame(sugestoes), graficos
+# Exibir sugestões
+st.subheader("💡 Sugestões de Operação (último período)")
+df_sug = pd.DataFrame(sugestoes)
+st.dataframe(df_sug, use_container_width=True)
 
-# Exibir sugestões visuais de compra e venda
-st.subheader("💡 Sugestões de Operações com Base nas Últimas 3 Horas")
-df_operacoes, graficos_operacoes = sugestao_operacoes(ativos)
-st.dataframe(df_operacoes, use_container_width=True)
+# Notificações visuais para ativo selecionado
+dados_ativo = obter_dados(ativo_codigo, inicio, fim)
+if not dados_ativo.empty:
+    preco_min = dados_ativo['Close'].min()
+    preco_max = dados_ativo['Close'].max()
+    preco_atual = dados_ativo['Close'].iloc[-1]
+    if preco_atual <= preco_min:
+        st.success(f"🔔 {ativo_nome} está no preço mais baixo do período: R$ {preco_atual:.2f}")
+    if preco_atual >= preco_max:
+        st.error(f"🔔 {ativo_nome} está no preço mais alto do período: R$ {preco_atual:.2f}")
 
-# Exibir gráficos das sugestões
-for nome, fig in graficos_operacoes.items():
-    with st.expander(f"Visualização: {nome}"):
+# Exibir gráficos em expander
+for nome, fig in graficos.items():
+    with st.expander(f"Ver gráfico: {nome}"):
         st.pyplot(fig)
 
-# Download de dados do ativo selecionado
-dados = yf.download(tickers=ativo_codigo, start=inicio, end=fim, interval="3m")
-
-df = dados[['Close']].copy()
-df = df.rename(columns={"Close": "Preço (R$)"})
-df["Horário"] = df.index
-
-if not df.empty:
-    entrada = df["Preço (R$)"].iloc[0]
-    saida = df["Preço (R$)"].iloc[-1]
-    lucro = saida - entrada
-
-    st.line_chart(df.set_index("Horário"))
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Lucro Simulado", f"R$ {lucro:.2f}", delta=f"{lucro/entrada*100:.2f}%")
-    col2.metric("Preço Inicial", f"R$ {entrada:.2f}")
-    col3.metric("Preço Atual", f"R$ {saida:.2f}")
-
-    st.markdown("---")
-    st.subheader("📊 Histórico de Preços (últimas 3h)")
-    st.dataframe(df[::-1], use_container_width=True)
+# Gráfico de linha com volume se disponível
+st.markdown("---")
+st.subheader(f"📈 Gráfico de Preço e Volume - {ativo_nome}")
+if not dados_ativo.empty:
+    df_plot = dados_ativo[['Close', 'Volume']].copy()
+    df_plot = df_plot.rename(columns={'Close':'Preço (R$)', 'Volume':'Volume'})
+    # Preço
+    st.line_chart(df_plot['Preço (R$)'])
+    # Volume
+    st.bar_chart(df_plot['Volume'])
 else:
-    st.warning("⚠️ Nenhum dado encontrado para o ativo selecionado no intervalo de tempo escolhido.")
+    st.warning("⚠️ Não há dados para exibir o gráfico de volume.")
 
-st.markdown("""
-<div style='text-align:center'>
-    <small>Atualizado em: {}</small>
-</div>
-""".format(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")), unsafe_allow_html=True)
+# Histórico de preços
+st.markdown("---")
+st.subheader(f"📊 Histórico de Preços (últimas {periodo_horas}h)")
+if not dados_ativo.empty:
+    df_hist = dados_ativo[['Close']].copy()
+    df_hist = df_hist.rename(columns={'Close':'Preço (R$)'}).reset_index()
+    df_hist['Horário'] = df_hist['Datetime']
+    st.dataframe(df_hist[["Horário","Preço (R$)"]][::-1], use_container_width=True)
+else:
+    st.warning("⚠️ Nenhum dado encontrado no histórico.")
+
+st.markdown(f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H:%M:%S')}</small></div>", unsafe_allow_html=True)
+
 
 
