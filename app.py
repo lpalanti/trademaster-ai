@@ -81,37 +81,36 @@ if selected_option == "Day Trade Cripto":
     st.subheader("Criptoativos")
     cripto_data = get_cripto_data()
     for index, row in cripto_data.iterrows():
-        st.write(f"**{row['name']}**")
-        st.write(f"Volatilidade: {row['price_change_percentage_24h']}%")
-        st.write(f"Menor preço do dia: {row['low_24h']}")
-        st.write(f"Maior preço do dia: {row['high_24h']}")
-        st.write(f"Preço ideal de compra: {row['buy_price']}")
-        st.write(f"Preço ideal de venda: {row['sell_price']}")
-        st.write("----")
+        with st.expander(f"{row['name']}"):
+            st.write(f"Volatilidade: {row['price_change_percentage_24h']}%")
+            st.write(f"Menor preço do dia: {row['low_24h']}")
+            st.write(f"Maior preço do dia: {row['high_24h']}")
+            st.write(f"Preço ideal de compra: {row['buy_price']}")
+            st.write(f"Preço ideal de venda: {row['sell_price']}")
+            st.write("----")
 
 # Exibição dos dados de Ações
 elif selected_option == "Day Trade Ações":
     st.subheader("Ações")
     stock_data = get_stock_data()
     for ticker, info in stock_data.items():
-        st.write(f"**{ticker}**")
-        st.write(f"Volatilidade: {info['volatility']}%")
-        st.write(f"Menor preço do dia: {info['lowest_price']}")
-        st.write(f"Maior preço do dia: {info['highest_price']}")
-        st.write(f"Preço ideal de compra: {info['buy_price']}")
-        st.write(f"Preço ideal de venda: {info['sell_price']}")
-        st.write("----")
+        with st.expander(f"{ticker}"):
+            st.write(f"Volatilidade: {info['volatility']}%")
+            st.write(f"Menor preço do dia: {info['lowest_price']}")
+            st.write(f"Maior preço do dia: {info['highest_price']}")
+            st.write(f"Preço ideal de compra: {info['buy_price']}")
+            st.write(f"Preço ideal de venda: {info['sell_price']}")
+            st.write("----")
 
 # Exibição dos dados de Commodities
 elif selected_option == "Day Trade Commodities":
     st.subheader("Commodities")
     commodities_data = get_commodities_data()
     for name, info in commodities_data.items():
-        st.write(f"**{name}**")
-        st.write(f"Volatilidade: {info['volatility']}%")
-        st.write(f"Menor preço do dia: {info['lowest_price']}")
-        st.write(f"Maior preço do dia: {info['highest_price']}")
-        st.write(f"Preço ideal de compra: {info['buy_price']}")
-        st.write(f"Preço ideal de venda: {info['sell_price']}")
-        st.write("----")
-
+        with st.expander(f"{name}"):
+            st.write(f"Volatilidade: {info['volatility']}%")
+            st.write(f"Menor preço do dia: {info['lowest_price']}")
+            st.write(f"Maior preço do dia: {info['highest_price']}")
+            st.write(f"Preço ideal de compra: {info['buy_price']}")
+            st.write(f"Preço ideal de venda: {info['sell_price']}")
+            st.write("----")
