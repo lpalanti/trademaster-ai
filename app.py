@@ -1,106 +1,85 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta  # Substituindo TA-Lib por pandas_ta
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# Função para carregar dados financeiros de um ativo
-def carregar_dados(ativo):
-    data_inicial = datetime.now() - pd.Timedelta(days=30)  # Dados dos últimos 30 dias
-    dados = yf.download(ativo, start=data_inicial.strftime('%Y-%m-%d'))
-    return dados
+# Configurações iniciais da página
+st.set_page_config(page_title="TradeMaster AI", layout="wide")
+st.title("📈 TradeMaster AI")
+st.markdown("Analise ativos em tempo real com sugestões inteligentes baseadas no desempenho recente do mercado.")
 
-# Função para calcular os indicadores técnicos
-def calcular_indicadores(dados):
-    # Média Móvel Simples (SMA) de 50 e 200 períodos
-    dados['SMA50'] = dados['Close'].rolling(window=50).mean()
-    dados['SMA200'] = dados['Close'].rolling(window=200).mean()
-    
-    # Índice de Força Relativa (RSI) de 14 períodos
-    dados['RSI'] = ta.rsi(dados['Close'], length=14)  # Usando pandas_ta para o RSI
-    
-    return dados
+# Lista de ativos populares (pode personalizar)
+ativos_default = ['AAPL', 'GOOG', 'MSFT', 'TSLA', 'AMZN', 'NVDA', 'PETR4.SA', 'VALE3.SA', 'ITUB4.SA']
 
-# Função para gerar gráfico com os dados e indicadores
-def gerar_grafico(dados, ativo):
-    fig = go.Figure()
+# Entrada do usuário
+st.sidebar.header("Configurações")
+ativos_usuario = st.sidebar.text_input("Digite os ativos separados por vírgula", ', '.join(ativos_default))
+ativos = [a.strip().upper() for a in ativos_usuario.split(',')]
 
-    # Adicionando gráfico de preços de fechamento
-    fig.add_trace(go.Candlestick(x=dados.index,
-                                 open=dados['Open'],
-                                 high=dados['High'],
-                                 low=dados['Low'],
-                                 close=dados['Close'],
-                                 name='Candlestick'))
-    
-    # Adicionando a SMA50 e SMA200
-    fig.add_trace(go.Scatter(x=dados.index, y=dados['SMA50'], mode='lines', name='SMA50', line={'color': 'blue'}))
-    fig.add_trace(go.Scatter(x=dados.index, y=dados['SMA200'], mode='lines', name='SMA200', line={'color': 'red'}))
-    
-    # Adicionando o gráfico de RSI
-    fig.add_trace(go.Scatter(x=dados.index, y=dados['RSI'], mode='lines', name='RSI', line={'color': 'green'}))
+# Tempo atual e recorte de 3 horas
+agora = datetime.utcnow()
+inicio = agora - timedelta(hours=3)
 
-    # Layout do gráfico
-    fig.update_layout(
-        title=f'Gráfico de {ativo} - Últimos 30 dias',
-        xaxis_title='Data',
-        yaxis_title='Preço',
-        yaxis2=dict(title='RSI', overlaying='y', side='right'),
-        xaxis_rangeslider_visible=False
-    )
+# Função para obter dados de cada ativo
+def analisar_ativo(ticker):
+    try:
+        ativo = yf.Ticker(ticker)
+        df = ativo.history(interval="5m", start=inicio, end=agora)
+        df.dropna(inplace=True)
+        preco_atual = df['Close'][-1]
+        preco_max = df['High'].max()
+        preco_min = df['Low'].min()
+        variacao = ((df['Close'][-1] - df['Open'][0]) / df['Open'][0]) * 100
 
-    return fig
+        return {
+            'Ativo': ticker,
+            'Preço Atual': round(preco_atual, 2),
+            'Melhor Preço de Venda': round(preco_max, 2),
+            'Melhor Preço de Compra': round(preco_min, 2),
+            'Variação (%)': round(variacao, 2)
+        }
+    except Exception as e:
+        return {
+            'Ativo': ticker,
+            'Erro': str(e)
+        }
 
-# Função para sugerir momentos de compra e venda
-def sugerir_compras_vendas(dados):
-    # Sugestão de compra quando SMA50 cruza acima de SMA200
-    compra = dados[dados['SMA50'] > dados['SMA200']].tail(1)
-    
-    # Sugestão de venda quando SMA50 cruza abaixo de SMA200
-    venda = dados[dados['SMA50'] < dados['SMA200']].tail(1)
-    
-    return compra, venda
+# Carregando dados
+st.subheader("📊 Análise de Ativos - Últimas 3 Horas")
+analises = []
 
-# Função para exibir os dados e sugestões no Streamlit
-def exibir_dados():
-    ativo = st.text_input('Digite o símbolo do ativo (ex: AAPL para Apple)', 'AAPL')
+with st.spinner("Buscando dados em tempo real..."):
+    for ativo in ativos:
+        resultado = analisar_ativo(ativo)
+        analises.append(resultado)
 
-    # Carregando os dados
-    dados = carregar_dados(ativo)
-    dados = calcular_indicadores(dados)
-    
-    # Gerando gráfico
-    st.plotly_chart(gerar_grafico(dados, ativo), use_container_width=True)
-    
-    # Mostrando sugestões
-    compra, venda = sugerir_compras_vendas(dados)
+# Criar DataFrame com os resultados
+df_resultado = pd.DataFrame(analises)
 
-    st.header('Sugestões de Operações')
-    if not compra.empty:
-        st.subheader('Momento de Compra:')
-        st.write(compra)
-    else:
-        st.subheader('Sem sugestão de compra no momento')
+# Filtrar apenas ativos com dados válidos
+df_validos = df_resultado[df_resultado['Variação (%)'].notnull()]
 
-    if not venda.empty:
-        st.subheader('Momento de Venda:')
-        st.write(venda)
-    else:
-        st.subheader('Sem sugestão de venda no momento')
+# Exibir tabela principal
+st.dataframe(df_resultado, use_container_width=True)
 
-# Função principal que organiza o fluxo do app
-def main():
-    st.title("Assistente de Day Trade")
-    st.sidebar.header("Configurações")
+# Sugestões de investimento com base na maior variação positiva
+if not df_validos.empty:
+    melhores = df_validos.sort_values(by='Variação (%)', ascending=False).head(3)
 
-    exibir_dados()
+    st.subheader("🚀 Melhores oportunidades do momento")
+    for i, row in melhores.iterrows():
+        st.markdown(f"""
+        ### {row['Ativo']}
+        - 💵 Preço atual: R$ {row['Preço Atual']}
+        - 🔼 Melhor venda: R$ {row['Melhor Preço de Venda']}
+        - 🔽 Melhor compra: R$ {row['Melhor Preço de Compra']}
+        - 📈 Variação nas últimas 3h: {row['Variação (%)']}%
+        """)
 
-if __name__ == "__main__":
-    main()
+else:
+    st.warning("Nenhum dado válido encontrado. Verifique os símbolos ou tente novamente mais tarde.")
 
-import subprocess
-
-subprocess.run(["pip", "uninstall", "numpy", "-y"])
+# Rodapé
+st.markdown("---")
+st.caption("Powered by Yahoo Finance • Desenvolvido com ❤️ por TradeMaster AI")
 
