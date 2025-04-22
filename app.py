@@ -1,140 +1,110 @@
 import streamlit as st
-import pandas as pd
 import requests
 import yfinance as yf
-from datetime import datetime
+import pandas as pd
 
-st.set_page_config(page_title="Painel Day Trade", layout="wide")
-st.title("📊 Painel de Day Trade - Cripto, Ações e Commodities")
-st.caption("Atualização manual ou a cada 3 minutos via cache.")
-
-# Sidebar de navegação
-opcao = st.sidebar.radio("Selecione o Painel:", ["Cripto", "Ações", "Commodities"])
-
-# CRIPTO: via CoinGecko
-def obter_dados_cripto():
-    ids = "bitcoin,ethereum,ripple,dogecoin,litecoin,cardano,polkadot,solana,avalanche,chainlink,shiba-inu,binancecoin,polygon,uniswap,terra-luna"
-    url = f"https://api.coingecko.com/api/v3/coins/markets"
+# Função para obter dados de criptoativos
+@st.cache_data(ttl=180)  # Cache com tempo de expiração de 180 segundos (3 minutos)
+def get_cripto_data():
+    url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
-        "vs_currency": "usd",
-        "ids": ids,
+        'vs_currency': 'usd',
+        'ids': 'bitcoin,ethereum,ripple,dogecoin,litecoin,cardano,polkadot,solana,avalanche,chainlink,shiba-inu,binancecoin,polygon,uniswap,terra',
+        'order': 'market_cap_desc'
     }
-    r = requests.get(url, params=params)
-    data = r.json()
+    response = requests.get(url, params=params)
+    data = response.json()
+    return pd.DataFrame(data)
 
-    rows = []
-    for c in data:
-        vol = round(c['high_24h'] - c['low_24h'], 2)
-        pct = round((vol / c['low_24h']) * 100, 2) if c['low_24h'] else 0
-        rows.append({
-            "Ativo": f"{c['name']} ({c['symbol'].upper()})",
-            "Volatilidade": vol,
-            "% Volatilidade": f"{pct}%",
-            "Menor Preço": f"${c['low_24h']:.2f}",
-            "Maior Preço": f"${c['high_24h']:.2f}",
-            "Preço Ideal de Compra": f"${c['low_24h']:.2f}",
-            "Preço Ideal de Venda": f"${c['high_24h']:.2f}"
-        })
-
-    return pd.DataFrame(rows)
-
-# AÇÕES: via Alpha Vantage
-def obter_dados_acoes():
-    API_KEY = "IOKSXPMXJXFIKTI3"
-    tickers = ['TSLA', 'AMZN', 'AAPL', 'META', 'NFLX', 'NVDA', 'GME', 'AMC', 'SPOT', 'PLTR', 'ROKU', 'SQ', 'ZM', 'DOCU', 'BYND', 'COIN', 'HOOD', 'MRNA', 'SNOW']
-    resultados = []
-
-    for t in tickers:
-        url = "https://www.alphavantage.co/query"
-        params = {
-            "function": "TIME_SERIES_DAILY",
-            "symbol": t,
-            "apikey": API_KEY
+# Função para obter dados de ações
+@st.cache_data(ttl=180)  # Cache com tempo de expiração de 180 segundos (3 minutos)
+def get_stock_data():
+    tickers = [
+        "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT", "PLTR",
+        "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW"
+    ]
+    data = {}
+    for ticker in tickers:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="1d")
+        data[ticker] = {
+            "volatility": hist['Close'].pct_change().std() * 100,
+            "lowest_price": hist['Low'].iloc[0],
+            "highest_price": hist['High'].iloc[0],
+            "buy_price": hist['Close'].iloc[0] * 0.98,  # Exemplo de preço de compra
+            "sell_price": hist['Close'].iloc[0] * 1.02  # Exemplo de preço de venda
         }
-        r = requests.get(url, params=params)
-        data = r.json()
+    return data
 
-        try:
-            series = data["Time Series (Daily)"]
-            ultimos = list(series.values())[:2]
-            atual = ultimos[0]
-            anterior = ultimos[1]
-
-            minimo = float(atual["3. low"])
-            maximo = float(atual["2. high"])
-            vol = round(maximo - minimo, 2)
-            pct = round((vol / minimo) * 100, 2) if minimo else 0
-
-            resultados.append({
-                "Ativo": t,
-                "Volatilidade": vol,
-                "% Volatilidade": f"{pct}%",
-                "Menor Preço": f"${minimo:.2f}",
-                "Maior Preço": f"${maximo:.2f}",
-                "Preço Ideal de Compra": f"${minimo:.2f}",
-                "Preço Ideal de Venda": f"${maximo:.2f}",
-            })
-        except:
-            continue
-
-    return pd.DataFrame(resultados)
-
-# COMMODITIES: via yfinance
-def obter_dados_commodities():
-    ativos = {
-        "Ouro": "XAUUSD=X",
-        "Brent": "BZ=F",
-        "WTI": "CL=F",
-        "Cobre": "HG=F",
-        "Algodão": "CT=F",
-        "Café": "KC=F",
-        "Soja": "ZS=F",
-        "Milho": "ZC=F",
-        "Açúcar": "SB=F",
-        "Paládio": "PA=F",
+# Função para obter dados de commodities
+@st.cache_data(ttl=180)  # Cache com tempo de expiração de 180 segundos (3 minutos)
+def get_commodities_data():
+    commodities = {
+        "Gold": "XAU/USD",
+        "Brent Crude Oil": "BZ=F",
+        "WTI Crude Oil": "CL=F",
+        "Copper": "HG=F",
+        "Cotton": "CT=F",
+        "Coffee": "KC=F",
+        "Soybeans": "ZS=F",
+        "Corn": "ZC=F",
+        "Sugar": "SB=F",
+        "Palladium": "PA=F"
     }
+    data = {}
+    for name, symbol in commodities.items():
+        commodity = yf.Ticker(symbol)
+        hist = commodity.history(period="1d")
+        data[name] = {
+            "volatility": hist['Close'].pct_change().std() * 100,
+            "lowest_price": hist['Low'].iloc[0],
+            "highest_price": hist['High'].iloc[0],
+            "buy_price": hist['Close'].iloc[0] * 0.98,  # Exemplo de preço de compra
+            "sell_price": hist['Close'].iloc[0] * 1.02  # Exemplo de preço de venda
+        }
+    return data
 
-    resultados = []
+# Página Inicial
+st.title('Day Trade Dashboard')
 
-    for nome, ticker in ativos.items():
-        try:
-            df = yf.download(ticker, period="1d", interval="1h", progress=False)
-            if df.empty:
-                continue
-            minimo = df["Low"].min()
-            maximo = df["High"].max()
-            vol = round(maximo - minimo, 2)
-            pct = round((vol / minimo) * 100, 2) if minimo else 0
+# Botões
+selected_option = st.radio("Escolha o tipo de mercado:", ("Day Trade Cripto", "Day Trade Ações", "Day Trade Commodities"))
 
-            resultados.append({
-                "Ativo": nome,
-                "Volatilidade": vol,
-                "% Volatilidade": f"{pct}%",
-                "Menor Preço": f"${minimo:.2f}",
-                "Maior Preço": f"${maximo:.2f}",
-                "Preço Ideal de Compra": f"${minimo:.2f}",
-                "Preço Ideal de Venda": f"${maximo:.2f}",
-            })
-        except:
-            continue
+# Exibição dos dados de Cripto
+if selected_option == "Day Trade Cripto":
+    st.subheader("Criptoativos")
+    cripto_data = get_cripto_data()
+    for index, row in cripto_data.iterrows():
+        st.write(f"**{row['name']}**")
+        st.write(f"Volatilidade: {row['price_change_percentage_24h']}%")
+        st.write(f"Menor preço do dia: {row['low_24h']}")
+        st.write(f"Maior preço do dia: {row['high_24h']}")
+        st.write(f"Preço ideal de compra: {row['buy_price']}")
+        st.write(f"Preço ideal de venda: {row['sell_price']}")
+        st.write("----")
 
-    return pd.DataFrame(resultados)
+# Exibição dos dados de Ações
+elif selected_option == "Day Trade Ações":
+    st.subheader("Ações")
+    stock_data = get_stock_data()
+    for ticker, info in stock_data.items():
+        st.write(f"**{ticker}**")
+        st.write(f"Volatilidade: {info['volatility']}%")
+        st.write(f"Menor preço do dia: {info['lowest_price']}")
+        st.write(f"Maior preço do dia: {info['highest_price']}")
+        st.write(f"Preço ideal de compra: {info['buy_price']}")
+        st.write(f"Preço ideal de venda: {info['sell_price']}")
+        st.write("----")
 
-# Mostra o painel certo
-if opcao == "Cripto":
-    st.subheader("🪙 Criptomoedas")
-    df = obter_dados_cripto()
-    st.dataframe(df, use_container_width=True)
-
-elif opcao == "Ações":
-    st.subheader("📈 Ações")
-    df = obter_dados_acoes()
-    st.dataframe(df, use_container_width=True)
-
-elif opcao == "Commodities":
-    st.subheader("🌾 Commodities")
-    df = obter_dados_commodities()
-    st.dataframe(df, use_container_width=True)
-
-# Rodapé
-st.caption(f"Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+# Exibição dos dados de Commodities
+elif selected_option == "Day Trade Commodities":
+    st.subheader("Commodities")
+    commodities_data = get_commodities_data()
+    for name, info in commodities_data.items():
+        st.write(f"**{name}**")
+        st.write(f"Volatilidade: {info['volatility']}%")
+        st.write(f"Menor preço do dia: {info['lowest_price']}")
+        st.write(f"Maior preço do dia: {info['highest_price']}")
+        st.write(f"Preço ideal de compra: {info['buy_price']}")
+        st.write(f"Preço ideal de venda: {info['sell_price']}")
+        st.write("----")
