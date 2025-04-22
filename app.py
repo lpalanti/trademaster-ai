@@ -5,7 +5,6 @@ import datetime
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import numpy as np
-from io import StringIO
 
 # Configuração da página
 st.set_page_config(page_title="TradeMasterAI", layout="wide")
@@ -21,11 +20,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Título
-st.title("📈 TradeMasterAI - Painel de Simulação Day Trade")
+# Título\st.title("📈 TradeMasterAI - Painel de Simulação Day Trade")
 st.markdown("**Dados reais dos ativos | Atualiza a cada 3 minutos**")
 
-# Parâmetros de Simulação na barra lateral\st.sidebar.header("⚙️ Parâmetros de Simulação")
+# Parâmetros de Simulação na barra lateral
+st.sidebar.header("⚙️ Parâmetros de Simulação")
 capital = st.sidebar.number_input("Capital Inicial (R$)", value=10000.0, step=1000.0)
 leverage = st.sidebar.slider("Alavancagem", min_value=1, max_value=10, value=1)
 
@@ -50,12 +49,17 @@ periodo_horas = periodos[periodo_nome]
 fim = datetime.datetime.now()
 inicio = fim - datetime.timedelta(hours=periodo_horas)
 
-# Função cache para obter dados
-@st.cache_data(show_spinner=False)
+# Função cache para obter dados com tratamento de erros
 def obter_dados(codigo, start, end, interval="3m"):
-    return yf.download(tickers=codigo, start=start, end=end, interval=interval)
+    try:
+        df = yf.download(tickers=codigo, start=start, end=end, interval=interval)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        return df
+    except Exception:
+        return pd.DataFrame()
 
-# Coleta dados de todos os ativos para sugestões e gráficos
+# Generating suggestions and charts
 sugestoes = []
 graficos = {}
 for nome, codigo in ativos.items():
@@ -82,55 +86,54 @@ for nome, codigo in ativos.items():
 
 # Exibir sugestões
 st.subheader("💡 Sugestões de Operação (último período)")
-df_sug = pd.DataFrame(sugestoes)
-st.dataframe(df_sug, use_container_width=True)
+if sugestoes:
+    df_sug = pd.DataFrame(sugestoes)
+    st.dataframe(df_sug, use_container_width=True)
+else:
+    st.warning("⚠️ Não foi possível obter sugestões, verifique o período ou a cotação dos ativos.")
 
 # Exibir gráficos de sugestões
-for nome, fig in graficos.items():
-    with st.expander(f"Ver gráfico: {nome}"):
-        st.pyplot(fig)
+tab1, tab2 = st.tabs(["Sugestões", "Simulação 24h"])
+with tab1:
+    for nome, fig in graficos.items():
+        with st.expander(f"Ver gráfico: {nome}"):
+            st.pyplot(fig)
 
 # Seção de Simulador de Operações (últimas 24h)
-st.markdown("---")
-st.subheader("🧮 Simulador de Operações - Últimas 24h")
-start_bt = fim - datetime.timedelta(hours=24)
-df_bt_list = []
-for nome, codigo in ativos.items():
-    df_bt = obter_dados(codigo, start_bt, fim, interval="5m")
-    if not df_bt.empty:
-        entry = df_bt['Close'].min()
-        exit = df_bt['Close'].max()
-        qty = capital * leverage / entry
-        pnl = (exit - entry) * qty
-        df_bt_list.append({
-            "Ativo": nome,
-            "Entry (R$)": f"{entry:.2f}",
-            "Exit (R$)": f"{exit:.2f}",
-            "Qty": f"{qty:.2f}",
-            "PnL (R$)": f"{pnl:.2f}"  
-        })
-
-# Resultado do simulador
-df_bt = pd.DataFrame(df_bt_list)
-total_pnl = df_bt['PnL (R$)'].apply(lambda x: float(x.replace(',',''))).sum()
-capital_final = capital + total_pnl
-col1, col2 = st.columns(2)
-col1.metric("Capital Inicial", f"R$ {capital:.2f}")
-col2.metric("Capital Final (Simulado)", f"R$ {capital_final:.2f}", delta=f"R$ {total_pnl:.2f}")
-st.dataframe(df_bt, use_container_width=True)
-
-# Backtest de compra no fundo e venda no topo (24h)
-st.markdown("---")
-st.subheader("📊 Backtest Estratégia Fundo->Topo (24h)")
-if not df_bt.empty:
-    df_bt['% PnL'] = (df_bt['PnL (R$)'].astype(float) / capital) * 100
-    st.bar_chart(df_bt.set_index('Ativo')['% PnL'])
-else:
-    st.warning("⚠️ Não há dados para backtest.")
-
-# Download do histórico completo
-csv = df_bt.to_csv(index=False).encode('utf-8')
-st.download_button(label="📥 Baixar histórico (CSV)", data=csv, file_name="historico_trades.csv", mime='text/csv')
+with tab2:
+    st.subheader("🧮 Simulador de Operações - Últimas 24h")
+    start_bt = fim - datetime.timedelta(hours=24)
+    df_bt_list = []
+    for nome, codigo in ativos.items():
+        df_bt = obter_dados(codigo, start_bt, fim, interval="5m")
+        if not df_bt.empty:
+            entry = df_bt['Close'].min()
+            exit_ = df_bt['Close'].max()
+            qty = capital * leverage / entry
+            pnl = (exit_ - entry) * qty
+            df_bt_list.append({
+                "Ativo": nome,
+                "Entry (R$)": f"{entry:.2f}",
+                "Exit (R$)": f"{exit_:.2f}",
+                "Qty": f"{qty:.2f}",
+                "PnL (R$)": f"{pnl:.2f}"  
+            })
+    if df_bt_list:
+        df_bt = pd.DataFrame(df_bt_list)
+        total_pnl = df_bt['PnL (R$)'].astype(float).sum()
+        capital_final = capital + total_pnl
+        col1, col2 = st.columns(2)
+        col1.metric("Capital Inicial", f"R$ {capital:.2f}")
+        col2.metric("Capital Final (Simulado)", f"R$ {capital_final:.2f}", delta=f"R$ {total_pnl:.2f}")
+        st.dataframe(df_bt, use_container_width=True)
+        # Backtest gráfico
+        df_bt['% PnL'] = (df_bt['PnL (R$)'].astype(float) / capital) * 100
+        st.bar_chart(df_bt.set_index('Ativo')['% PnL'])
+        # Download do histórico completo
+        csv = df_bt.to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Baixar histórico (CSV)", data=csv, file_name="historico_trades.csv", mime='text/csv')
+    else:
+        st.warning("⚠️ Não há dados para simular operações nas últimas 24h.")
 
 # Data de atualização
 st.markdown(f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H:%M:%S')}</small></div>", unsafe_allow_html=True)
