@@ -51,98 +51,116 @@ tab1, tab2 = st.tabs(["💡 Sugestões", "🛠 Simulação & Backtest"])
 # --- Botão de Atualização ---
 atualizar = st.button("🔄 Atualizar Dados")
 
-# --- Tab 1: Sugestões de Operações ---
+# --- Tab 1: Sugestões de Operações com Candles ---
 with tab1:
     st.subheader(f"Sugestões de Compra/Venda ({periodo})")
     df_all = []
-    figs = {}
-    if atualizar:  # Só atualiza quando o botão for pressionado
-        for nome, cod in ativos.items():
-            dados = obter_dados(cod, inicio, fim)
-            if dados.empty:
-                continue
-            prec_min = float(dados["Close"].min())
-            prec_max = float(dados["Close"].max())
-            prec_atual = float(dados["Close"].iloc[-1])
-            pot = (prec_max - prec_atual) / prec_atual * 100
+    figs_bar = {}
+    figs_candle = {}
 
-            df_all.append({
-                "Ativo": nome,
-                "Preço Ideal 🟢": f"R$ {prec_min:.2f}",
-                "Preço Ideal 🔴": f"R$ {prec_max:.2f}",
-                "Atual ⚪": f"R$ {prec_atual:.2f}",
-                "Potencial (%)": f"{pot:.2f}%"
-            })
+    for nome, cod in ativos.items():
+        dados = obter_dados(cod, inicio, fim)
+        if dados.empty:
+            continue
 
-            # gráfico de barras
-            fig, ax = plt.subplots()
-            bars = ax.bar(
-                ["Compra", "Venda", "Atual"],
-                [prec_min, prec_max, prec_atual],
-                color=["#4CAF50", "#F44336", "#9E9E9E"]
-            )
-            ax.bar_label(bars, fmt="R$ %.2f")
-            ax.set_title(nome, color="white")
-            ax.set_ylabel("Preço (R$)", color="white")
-            ax.tick_params(colors="white")
-            figs[nome] = fig
+        # cálculos básicos
+        prec_min = float(dados["Close"].min())
+        prec_max = float(dados["Close"].max())
+        prec_atual = float(dados["Close"].iloc[-1])
+        pot = (prec_max - prec_atual) / prec_atual * 100
 
-        df_sug = pd.DataFrame(df_all)
-        st.dataframe(df_sug, use_container_width=True)
+        # guarda na tabela
+        df_all.append({
+            "Ativo": nome,
+            "Preço Ideal 🟢": f"R$ {prec_min:.2f}",
+            "Preço Ideal 🔴": f"R$ {prec_max:.2f}",
+            "Atual ⚪": f"R$ {prec_atual:.2f}",
+            "Potencial (%)": f"{pot:.2f}%"
+        })
 
-        for nm, fg in figs.items():
-            with st.expander(f"Gráfico: {nm}"):
-                st.pyplot(fg)
+        # gráfico de barras
+        figb, axb = plt.subplots()
+        bars = axb.bar(
+            ["Compra", "Venda", "Atual"],
+            [prec_min, prec_max, prec_atual],
+            color=["#4CAF50", "#F44336", "#9E9E9E"]
+        )
+        axb.bar_label(bars, fmt="R$ %.2f")
+        axb.set_title(nome, color="white")
+        axb.set_ylabel("Preço (R$)", color="white")
+        axb.tick_params(colors="white")
+        figs_bar[nome] = figb
 
-# --- Tab 2: Simulação & Backtest ---
+        # gráfico de candlestick
+        mc = mpf.make_marketcolors(up='green', down='red', edge='inherit', wick={'up':'green','down':'red'})
+        s  = mpf.make_mpf_style(marketcolors=mc, facecolor='black', edgecolor='white', gridcolor='gray')
+        figc, _ = mpf.plot(
+            dados,
+            type='candle',
+            style=s,
+            returnfig=True,
+            figsize=(6,4),
+            title=f"{nome} — Últimas {periodo}"
+        )
+        figs_candle[nome] = figc
+
+    # tabela geral
+    df_sug = pd.DataFrame(df_all)
+    st.dataframe(df_sug, use_container_width=True)
+
+    # expanders com barras e candles
+    for nm in df_sug["Ativo"]:
+        with st.expander(f"{nm}"):
+            st.pyplot(figs_bar[nm])
+            st.pyplot(figs_candle[nm])
+
+# --- Tab 2: Simulação & Backtest (permanece igual) ---
 with tab2:
     st.subheader(f"Simulação & Backtest ({periodo})")
 
-    # Dados do ativo selecionado
-    if atualizar:
-        df = obter_dados(ativo_codigo, inicio, fim)
-        if not df.empty:
-            entry = float(df["Close"].iloc[0])
-            exit_price = float(df["Close"].iloc[-1])
-        else:
-            entry = 0.0
-            exit_price = 0.0
-        pnl = exit_price - entry
+    df = obter_dados(ativo_codigo, inicio, fim)
+    if not df.empty:
+        entry = float(df["Close"].iloc[0])
+        exit_price = float(df["Close"].iloc[-1])
+    else:
+        entry = exit_price = 0.0
+    pnl = exit_price - entry
 
-        # Backtest últimas 24h
-        inicio24 = fim - datetime.timedelta(hours=24)
-        df24 = obter_dados(ativo_codigo, inicio24, fim, interval="15m")
-        if not df24.empty:
-            min24 = float(df24["Close"].min())
-            max24 = float(df24["Close"].max())
-        else:
-            min24 = 0.0
-            max24 = 0.0
-        pnl24 = max24 - min24
+    inicio24 = fim - datetime.timedelta(hours=24)
+    df24 = obter_dados(ativo_codigo, inicio24, fim, interval="15m")
+    if not df24.empty:
+        min24 = float(df24["Close"].min())
+        max24 = float(df24["Close"].max())
+    else:
+        min24 = max24 = 0.0
+    pnl24 = max24 - min24
 
-        # Histórico de trades
-        historico = [
-            {"Período": "Simulado", "Entry (R$)": entry, "Exit (R$)": exit_price, "P&L (R$)": pnl},
-            {"Período": "Backtest 24h", "Entry (R$)": min24, "Exit (R$)": max24, "P&L (R$)": pnl24}
-        ]
-        hist_df = pd.DataFrame(historico)
+    historico = [
+        {"Período": "Simulado",    "Entry (R$)": entry,  "Exit (R$)": exit_price, "P&L (R$)": pnl},
+        {"Período": "Backtest 24h", "Entry (R$)": min24,  "Exit (R$)": max24,      "P&L (R$)": pnl24}
+    ]
+    hist_df = pd.DataFrame(historico)
 
-        # Exibe métricas
-        col1, col2 = st.columns(2)
-        col1.metric("P&L Simulação", f"R$ {pnl:.2f}", delta=f"R$ {pnl:.2f}")
-        col2.metric("P&L Backtest 24h", f"R$ {pnl24:.2f}", delta=f"R$ {pnl24:.2f}")
+    col1, col2 = st.columns(2)
+    col1.metric("P&L Simulação",        f"R$ {pnl:.2f}",  delta=f"R$ {pnl:.2f}")
+    col2.metric("P&L Backtest 24h",     f"R$ {pnl24:.2f}", delta=f"R$ {pnl24:.2f}")
 
-        st.markdown("**Histórico de Trades**")
-        st.dataframe(hist_df, use_container_width=True)
+    st.markdown("**Histórico de Trades**")
+    st.dataframe(hist_df, use_container_width=True)
 
-        # Download CSV
-        csv = hist_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 Baixar histórico (CSV)",
-            data=csv,
-            file_name="trade_history.csv",
-            mime="text/csv"
-        )
+    csv = hist_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="📥 Baixar histórico (CSV)",
+        data=csv,
+        file_name="trade_history.csv",
+        mime="text/csv"
+    )
+
+# --- Rodapé ---
+st.markdown(
+    f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H:%M:%S')}</small></div>",
+    unsafe_allow_html=True
+)
 
 # --- Rodapé com timestamp ---
 st.markdown(
