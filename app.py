@@ -1,86 +1,45 @@
-import requests
-import pandas as pd
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
+import pandas as pd
+import requests
+import time
 
-# --- Função para obter dados de criptomoedas ---
-def obter_dados_cripto():
-    url = "https://api.coingecko.com/api/v3/coins/markets"
-    params = {
-        'vs_currency': 'usd',
-        'ids': 'bitcoin,ethereum,ripple,dogecoin,litecoin,cardano,polkadot,solana,avalanche,chainlink,shiba-inu,binancecoin,polygon,uniswap,terra-luna',
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
+st.set_page_config(page_title="TradeMaster AI", layout="wide")
 
-    ativos = []
-    for item in data:
-        ativos.append({
-            'Ativo': item.get('name', '') + ' (' + item.get('symbol', '').upper() + ')',
-            'Volatilidade': f"{item.get('price_change_percentage_24h', 0):.2f}%",
-            'Preço Mínimo': f"${item.get('low_24h', 0):.2f}",
-            'Preço Máximo': f"${item.get('high_24h', 0):.2f}",
-            'Preço Ideal de Compra': f"${item.get('low_24h', 0):.2f}",
-            'Preço Ideal de Venda': f"${item.get('high_24h', 0):.2f}",
-        })
+# Autorefresh a cada 10 segundos
+st_autorefresh(interval=10 * 1000, key="datarefresh")
 
-    return pd.DataFrame(ativos)
+st.title("📈 TradeMaster AI")
+st.markdown("### Análise em tempo real de ações e criptomoedas")
 
-# --- Função para obter dados de ações ---
-def obter_dados_acoes():
-    API_KEY = 'IOKSXPMXJXFIKTI3'
-    tickers = ['TSLA', 'AMZN', 'AAPL', 'META', 'NFLX', 'NVDA', 'GME', 'AMC', 'SPOT', 'PLTR', 'ROKU', 'SQ', 'ZM', 'DOCU', 'BYND', 'COIN', 'HOOD', 'MRNA', 'SNOW']
-    ativos = []
+with st.sidebar:
+    st.header("Configurações")
+    ativo = st.text_input("Ticker do ativo", value="BTC-USD")
+    intervalo = st.selectbox("Intervalo", options=["1m", "5m", "15m", "1h", "1d"], index=4)
+    st.caption("Atualizando automaticamente a cada 10 segundos.")
 
-    for ticker in tickers:
-        url = f'https://www.alphavantage.co/query'
-        params = {
-            'function': 'TIME_SERIES_INTRADAY',
-            'symbol': ticker,
-            'interval': '1min',
-            'apikey': API_KEY
-        }
-        response = requests.get(url, params=params)
-        data = response.json()
+@st.cache_data(ttl=10)
+def obter_dados(ticker, intervalo):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval={intervalo}&range=1d"
+    resposta = requests.get(url)
+    if resposta.status_code != 200:
+        return None
+    dados = resposta.json()
+    try:
+        timestamps = dados["chart"]["result"][0]["timestamp"]
+        precos = dados["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+        df = pd.DataFrame({
+            "Tempo": pd.to_datetime(timestamps, unit="s"),
+            "Preço": precos
+        }).dropna()
+        return df
+    except Exception as e:
+        return None
 
-        if 'Time Series (1min)' not in data:
-            continue
+dados = obter_dados(ativo, intervalo)
 
-        series = data['Time Series (1min)']
-        times = list(series.keys())
-        valores = [float(info['4. close']) for info in series.values()]
-        preco_atual = float(series[times[0]]['4. close'])
-        preco_minimo = min(valores)
-        preco_maximo = max(valores)
-
-        ativos.append({
-            'Ativo': ticker,
-            'Volatilidade': f"{((preco_maximo - preco_minimo) / preco_minimo) * 100:.2f}%",
-            'Preço Mínimo': f"${preco_minimo:.2f}",
-            'Preço Máximo': f"${preco_maximo:.2f}",
-            'Preço Ideal de Compra': f"${preco_minimo:.2f}",
-            'Preço Ideal de Venda': f"${preco_maximo:.2f}",
-        })
-
-    return pd.DataFrame(ativos)
-
-# --- Função principal do app ---
-def main():
-    # Atualiza a cada 60 segundos (60000 ms)
-    st_autorefresh(interval=60000, key="refresh")
-
-    st.title("📊 Painel de Cripto e Ações")
-    st.caption("Atualização automática a cada 60 segundos")
-
-    st.subheader("💰 Criptomoedas")
-    df_cripto = obter_dados_cripto()
-    st.dataframe(df_cripto, use_container_width=True)
-
-    st.subheader("📈 Ações")
-    df_acoes = obter_dados_acoes()
-    st.dataframe(df_acoes, use_container_width=True)
-
-# --- Executa o app ---
-if __name__ == "__main__":
-    main()
+if dados is None or dados.empty:
+    st.error("Erro ao carregar dados. Verifique o ticker ou tente novamente.")
+else:
+    st.line_chart(dados.set_index("Tempo"))
 
