@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import talib
+import pandas_ta as ta  # Substituindo TA-Lib por pandas_ta
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from datetime import datetime
@@ -19,7 +19,7 @@ def calcular_indicadores(dados):
     dados['SMA200'] = dados['Close'].rolling(window=200).mean()
     
     # Índice de Força Relativa (RSI) de 14 períodos
-    dados['RSI'] = talib.RSI(dados['Close'], timeperiod=14)
+    dados['RSI'] = ta.rsi(dados['Close'], length=14)  # Usando pandas_ta para o RSI
     
     return dados
 
@@ -99,4 +99,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
