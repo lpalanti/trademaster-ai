@@ -5,9 +5,9 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 st.set_page_config(layout="wide")
-st.title("📈 TradeMaster AI – Assistente de Daytrade Cripto")
+st.title("📈 TradeMaster AI – Assistente de Daytrade Cripto & Ações")
 
-# Dicionário com os ativos
+# Dicionários com as criptos e ações
 coins = {
     "Bitcoin (BTC)": "bitcoin",
     "Ethereum (ETH)": "ethereum",
@@ -26,63 +26,116 @@ coins = {
     "Terra (LUNA)": "terra-luna"
 }
 
+stocks = {
+    "Tesla (TSLA)": "tsla",
+    "Amazon (AMZN)": "amzn",
+    "Apple (AAPL)": "aapl",
+    "Meta (META)": "meta",
+    "Netflix (NFLX)": "nflx",
+    "Nvidia (NVDA)": "nvda",
+    "GameStop (GME)": "gme",
+    "AMC Entertainment (AMC)": "amc",
+    "Spotify (SPOT)": "spot",
+    "Palantir (PLTR)": "pltr",
+    "Roku (ROKU)": "roku",
+    "Square (SQ)": "sq",
+    "Zoom Video (ZM)": "zm",
+    "DocuSign (DOCU)": "docu",
+    "Beyond Meat (BYND)": "bynd",
+    "Coinbase (COIN)": "coin",
+    "Robinhood (HOOD)": "hood",
+    "Moderna (MRNA)": "mrna",
+    "Snowflake (SNOW)": "snow"
+}
+
 # -----------------------------
-# VOLATILIDADE
+# FUNÇÃO PARA BUSCAR DADOS DA API
 # -----------------------------
 
 @st.cache_data(ttl=60)
-def get_volatility_data():
-    ids = ",".join(coins.values())
-    url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={ids}&order=market_cap_desc"
+def get_market_data(assets, asset_type="crypto"):
+    if asset_type == "crypto":
+        url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={','.join(assets.values())}&order=market_cap_desc"
+    else:  # stock data via another API
+        url = f"https://api.twelvedata.com/time_series?symbol={','.join(assets.values())}&interval=1min&apikey=YOUR_TWELVE_DATA_API_KEY"
+    
     r = requests.get(url)
     if r.status_code == 200:
         data = r.json()
         return pd.DataFrame([{
-            "name": item["name"],
-            "symbol": item["symbol"].upper(),
-            "volatility": abs(item["price_change_percentage_24h"] or 0),
-            "price": item["current_price"],
-            "low_24h": item["low_24h"],
-            "high_24h": item["high_24h"],
-            "buy_suggestion": round(item["current_price"] * 0.95, 4),
-            "sell_suggestion": round(item["current_price"] * 1.05, 4)
+            "name": item.get("name", item.get("symbol")),
+            "symbol": item.get("symbol").upper(),
+            "volatility": abs(item.get("price_change_percentage_24h", 0) if asset_type == "crypto" else item.get("percent_change", 0)),
+            "price": item.get("current_price", item["close"] if asset_type == "crypto" else 0),
+            "low_24h": item.get("low_24h", item["low"] if asset_type == "crypto" else 0),
+            "high_24h": item.get("high_24h", item["high"] if asset_type == "crypto" else 0),
+            "buy_suggestion": round(item.get("current_price", 0) * 0.95, 4),
+            "sell_suggestion": round(item.get("current_price", 0) * 1.05, 4)
         } for item in data])
     return pd.DataFrame()
 
+# -----------------------------
+# PAINEL DE VOLATILIDADE DAS CRIPTOS
+# -----------------------------
+
 st.subheader("📊 Volatilidade das Criptomoedas (últimas 24h)")
 
-vol_df = get_volatility_data()
-vol_df_sorted = vol_df.sort_values("volatility", ascending=False)
+crypto_df = get_market_data(coins, asset_type="crypto")
+crypto_df_sorted = crypto_df.sort_values("volatility", ascending=False)
 
-fig_vol = go.Figure(go.Bar(
-    x=vol_df_sorted["volatility"],
-    y=[f"{n} ({s})" for n, s in zip(vol_df_sorted["name"], vol_df_sorted["symbol"])],
+fig_crypto_vol = go.Figure(go.Bar(
+    x=crypto_df_sorted["volatility"],
+    y=[f"{n} ({s})" for n, s in zip(crypto_df_sorted["name"], crypto_df_sorted["symbol"])],
     orientation='h',
     marker=dict(color='rgba(255,100,100,0.6)', line=dict(color='red', width=1.5))
 ))
-fig_vol.update_layout(
+fig_crypto_vol.update_layout(
     height=500,
     xaxis_title="Variação percentual (absoluta) nas últimas 24h",
     yaxis_title="Criptomoeda",
-    title="🔺 Ranking de Volatilidade Atual",
+    title="🔺 Ranking de Volatilidade Atual (Criptos)",
     yaxis=dict(autorange="reversed")
 )
-st.plotly_chart(fig_vol, use_container_width=True)
+st.plotly_chart(fig_crypto_vol, use_container_width=True)
 
 # -----------------------------
-# TABELA DETALHADA
+# PAINEL DE VOLATILIDADE DAS AÇÕES
 # -----------------------------
 
-st.markdown("### 🧾 Detalhes dos Ativos (Valores em USD)")
-vol_df_sorted["volatility"] = vol_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
-vol_df_sorted["price"] = vol_df_sorted["price"].map(lambda x: f"${x:.4f}")
-vol_df_sorted["low_24h"] = vol_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
-vol_df_sorted["high_24h"] = vol_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
-vol_df_sorted["buy_suggestion"] = vol_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
-vol_df_sorted["sell_suggestion"] = vol_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
+st.subheader("📊 Volatilidade das Ações (últimas 24h)")
+
+stock_df = get_market_data(stocks, asset_type="stock")
+stock_df_sorted = stock_df.sort_values("volatility", ascending=False)
+
+fig_stock_vol = go.Figure(go.Bar(
+    x=stock_df_sorted["volatility"],
+    y=[f"{n} ({s})" for n, s in zip(stock_df_sorted["name"], stock_df_sorted["symbol"])],
+    orientation='h',
+    marker=dict(color='rgba(100,100,255,0.6)', line=dict(color='blue', width=1.5))
+))
+fig_stock_vol.update_layout(
+    height=500,
+    xaxis_title="Variação percentual (absoluta) nas últimas 24h",
+    yaxis_title="Ação",
+    title="🔺 Ranking de Volatilidade Atual (Ações)",
+    yaxis=dict(autorange="reversed")
+)
+st.plotly_chart(fig_stock_vol, use_container_width=True)
+
+# -----------------------------
+# TABELA DE DETALHES DE CRIPTOS
+# -----------------------------
+
+st.markdown("### 🧾 Detalhes dos Ativos Cripto (Valores em USD)")
+crypto_df_sorted["volatility"] = crypto_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
+crypto_df_sorted["price"] = crypto_df_sorted["price"].map(lambda x: f"${x:.4f}")
+crypto_df_sorted["low_24h"] = crypto_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
+crypto_df_sorted["high_24h"] = crypto_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
+crypto_df_sorted["buy_suggestion"] = crypto_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
+crypto_df_sorted["sell_suggestion"] = crypto_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
 
 st.dataframe(
-    vol_df_sorted[[
+    crypto_df_sorted[[
         "name", "symbol", "volatility", "price",
         "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
     ]].rename(columns={
@@ -100,52 +153,31 @@ st.dataframe(
 )
 
 # -----------------------------
-# ATIVO SELECIONADO
+# TABELA DE DETALHES DE AÇÕES
 # -----------------------------
 
-st.subheader("📉 Análise do Ativo Selecionado")
+st.markdown("### 🧾 Detalhes das Ações (Valores em USD)")
+stock_df_sorted["volatility"] = stock_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
+stock_df_sorted["price"] = stock_df_sorted["price"].map(lambda x: f"${x:.4f}")
+stock_df_sorted["low_24h"] = stock_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
+stock_df_sorted["high_24h"] = stock_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
+stock_df_sorted["buy_suggestion"] = stock_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
+stock_df_sorted["sell_suggestion"] = stock_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
 
-selected_coin = st.selectbox("Escolha a criptomoeda", list(coins.keys()))
-coin_id = coins[selected_coin]
-
-@st.cache_data(ttl=60)
-def get_coin_data(coin_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=minute"
-    r = requests.get(url)
-    if r.status_code == 200:
-        data = r.json()
-        return data
-    return None
-
-data = get_coin_data(coin_id)
-
-if data and "prices" in data:
-    df = pd.DataFrame(data["prices"], columns=["timestamp", "price"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit='ms')
-    df["datetime"] = df["timestamp"].dt.strftime("%H:%M")
-
-    # Gerar candles (OHLC por minuto)
-    ohlc = df.set_index("timestamp").resample("1min").agg({
-        "price": ["first", "max", "min", "last"]
-    }).dropna()
-    ohlc.columns = ["open", "high", "low", "close"]
-    ohlc.reset_index(inplace=True)
-
-    fig = go.Figure(data=[go.Candlestick(
-        x=ohlc["timestamp"],
-        open=ohlc["open"],
-        high=ohlc["high"],
-        low=ohlc["low"],
-        close=ohlc["close"],
-        name=selected_coin
-    )])
-    fig.update_layout(
-        title=f"📅 Gráfico Candle - {selected_coin}",
-        xaxis_title="Horário",
-        yaxis_title="Preço (USD)",
-        xaxis_rangeslider_visible=False,
-        height=600
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.error("Erro ao carregar os dados da criptomoeda.")
+st.dataframe(
+    stock_df_sorted[[
+        "name", "symbol", "volatility", "price",
+        "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
+    ]].rename(columns={
+        "name": "Nome",
+        "symbol": "Ticker",
+        "volatility": "Volatilidade (24h)",
+        "price": "Preço atual",
+        "low_24h": "Mín. do dia",
+        "high_24h": "Máx. do dia",
+        "buy_suggestion": "Sugestão de Compra",
+        "sell_suggestion": "Sugestão de Venda"
+    }),
+    use_container_width=True,
+    height=500
+)
