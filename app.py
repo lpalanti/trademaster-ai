@@ -66,11 +66,11 @@ def get_market_data(assets, asset_type="crypto"):
             "name": item.get("name", item.get("symbol")),
             "symbol": item.get("symbol").upper(),
             "volatility": abs(item.get("price_change_percentage_24h", 0) if asset_type == "crypto" else item.get("percent_change", 0)),
-            "price": item.get("current_price", item["close"] if asset_type == "crypto" else 0),
-            "low_24h": item.get("low_24h", item["low"] if asset_type == "crypto" else 0),
-            "high_24h": item.get("high_24h", item["high"] if asset_type == "crypto" else 0),
-            "buy_suggestion": round(item.get("current_price", 0) * 0.95, 4),
-            "sell_suggestion": round(item.get("current_price", 0) * 1.05, 4)
+            "price": item.get("current_price") if asset_type == "crypto" else item.get("close", 0),
+            "low_24h": item.get("low_24h", item.get("low", 0)),
+            "high_24h": item.get("high_24h", item.get("high", 0)),
+            "buy_suggestion": round(item.get("current_price", 0) * 0.95, 4) if asset_type == "crypto" else round(item.get("close", 0) * 0.95, 4),
+            "sell_suggestion": round(item.get("current_price", 0) * 1.05, 4) if asset_type == "crypto" else round(item.get("close", 0) * 1.05, 4)
         } for item in data])
     return pd.DataFrame()
 
