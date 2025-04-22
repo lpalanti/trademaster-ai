@@ -2,23 +2,30 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import datetime
-import matplotlib.pyplot as plt
-import mplfinance as mpf
+import plotly.graph_objects as go
 
-# --- Configurações iniciais ---
 st.set_page_config(page_title="TradeMasterAI", layout="wide")
+
+# Estilo escuro
 st.markdown("""
     <style>
-    body, .stApp, .css-18e3th9 {background-color: black; color: white;}
-    .stDataFrame, .stMetric {background-color: #111; color: white;}
-    .css-1d391kg input {background-color: #333; color: white;}
+    body {background-color: black; color: white;}
+    .stApp, .stDataFrame, .stMetric, .css-1d391kg input {
+        background-color: #111;
+        color: white;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📈 TradeMasterAI - Painel de Simulação Day Trade")
-st.markdown("Dados reais dos ativos | Atualiza a cada 3 minutos")
 
-# --- Lista de ativos e período ---
+# Filtro de período
+periodo = st.selectbox("Selecione o período de análise:", ["1h", "3h", "6h", "12h"])
+multiplicador = int(periodo.replace("h", ""))
+fim = datetime.datetime.now()
+inicio = fim - datetime.timedelta(hours=multiplicador)
+
+# Ativos disponíveis
 ativos = {
     "Bitcoin (BTC-USD)": "BTC-USD",
     "Mini Índice (WIN=F)": "WIN=F",
@@ -27,146 +34,129 @@ ativos = {
     "Apple (AAPL)": "AAPL",
     "Tesla (TSLA)": "TSLA"
 }
-ativo_nome = st.selectbox("Selecione o ativo:", list(ativos.keys()))
-ativo_codigo = ativos[ativo_nome]
 
-# Escolha de período dinâmico
-periodo = st.selectbox("Período de análise:", ["1h", "3h", "6h", "12h"])
-horas = int(periodo.replace("h", ""))
-fim = datetime.datetime.now()
-inicio = fim - datetime.timedelta(hours=horas)
+# Botão de atualização
+atualizar = st.button("🔄 Atualizar dados")
 
-# --- Função para baixar dados com cache e tratamento de erro ---
 @st.cache_data(show_spinner=False)
-def obter_dados(codigo, start, end, interval="3m"):
-    try:
-        df = yf.download(tickers=codigo, start=start, end=end, interval=interval)
-        return df
-    except Exception:
-        return pd.DataFrame()
+def obter_dados(codigo, start, end, intervalo="3m"):
+    dados = yf.download(tickers=codigo, start=start, end=end, interval=intervalo)
+    return dados
 
-# --- Abas ---
-tab1, tab2 = st.tabs(["💡 Sugestões", "🛠 Simulação & Backtest"])
+historico_trades = []
+ranking = []
 
-# --- Botão de Atualização ---
-atualizar = st.button("🔄 Atualizar Dados")
+# Análise por ativo
+for nome, codigo in ativos.items():
+    with st.expander(f"📊 {nome}"):
+        if atualizar:
+            st.experimental_rerun()
 
-# --- Tab 1: Sugestões de Operações com Candles ---
-with tab1:
-    st.subheader(f"Sugestões de Compra/Venda ({periodo})")
-    
-    # Criar lista para armazenar dados
-    df_all = []
-    figs_bar = {}
-    figs_candle = {}
+        dados = obter_dados(codigo, inicio, fim)
 
-    for nome, cod in ativos.items():
-        dados = obter_dados(cod, inicio, fim)
         if dados.empty:
+            st.warning("Sem dados disponíveis.")
             continue
 
-        # cálculos básicos
-        prec_min = float(dados["Close"].min())
-        prec_max = float(dados["Close"].max())
-        prec_atual = float(dados["Close"].iloc[-1])
-        pot = (prec_max - prec_atual) / prec_atual * 100
+        dados["SMA_5"] = dados["Close"].rolling(5).mean()
+        dados["SMA_10"] = dados["Close"].rolling(10).mean()
 
-        # Adicionar dados na lista
-        df_all.append({
+        preco_min = dados["Close"].min()
+        preco_max = dados["Close"].max()
+        preco_atual = dados["Close"].iloc[-1]
+        volume_total = dados["Volume"].sum()
+
+        st.metric("📉 Preço Atual", f"R$ {preco_atual:.2f}")
+        st.metric("💹 Volume Total", f"{volume_total:,.0f}")
+
+        fig = go.Figure()
+        fig.add_trace(go.Candlestick(
+            x=dados.index,
+            open=dados["Open"],
+            high=dados["High"],
+            low=dados["Low"],
+            close=dados["Close"],
+            name="Candles"
+        ))
+        fig.add_trace(go.Scatter(x=dados.index, y=dados["SMA_5"], mode='lines', name='SMA 5', line=dict(color='orange')))
+        fig.add_trace(go.Scatter(x=dados.index, y=dados["SMA_10"], mode='lines', name='SMA 10', line=dict(color='blue')))
+        fig.update_layout(height=400, title=f"{nome} - Últimas {periodo}", xaxis_title="Horário", yaxis_title="Preço")
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        if dados["SMA_5"].iloc[-2] < dados["SMA_10"].iloc[-2] and dados["SMA_5"].iloc[-1] > dados["SMA_10"].iloc[-1]:
+            st.success("📈 Alerta: SMA 5 cruzou acima da SMA 10 (Sinal de Compra)")
+        elif dados["SMA_5"].iloc[-2] > dados["SMA_10"].iloc[-2] and dados["SMA_5"].iloc[-1] < dados["SMA_10"].iloc[-1]:
+            st.error("📉 Alerta: SMA 5 cruzou abaixo da SMA 10 (Sinal de Venda)")
+
+        st.markdown("### 🎯 Simulador de Trade")
+        capital = st.number_input(f"Capital disponível ({nome})", min_value=100.0, value=1000.0, key=f"capital_{codigo}")
+        alavancagem = st.slider(f"Alavancagem ({nome})", 1, 10, 1, key=f"alav_{codigo}")
+        preco_entrada = st.number_input(f"Preço de entrada ({nome})", value=float(preco_atual), key=f"entrada_{codigo}")
+        preco_saida = st.number_input(f"Preço de saída ({nome})", value=float(preco_atual * 1.01), key=f"saida_{codigo}")
+
+        quantidade = (capital * alavancagem) / preco_entrada
+        lucro_total = (preco_saida - preco_entrada) * quantidade
+        perc = (lucro_total / capital) * 100
+
+        st.metric("💰 Lucro Simulado", f"R$ {lucro_total:.2f}", delta=f"{perc:.2f}%")
+
+        historico_trades.append({
             "Ativo": nome,
-            "Preço Ideal 🟢": f"R$ {prec_min:.2f}",
-            "Preço Ideal 🔴": f"R$ {prec_max:.2f}",
-            "Atual ⚪": f"R$ {prec_atual:.2f}",
-            "Potencial (%)": f"{pot:.2f}%"
+            "Entrada (R$)": preco_entrada,
+            "Saída (R$)": preco_saida,
+            "Lucro (R$)": round(lucro_total, 2),
+            "Lucro (%)": round(perc, 2)
         })
 
-        # gráfico de barras
-        figb, axb = plt.subplots()
-        bars = axb.bar(
-            ["Compra", "Venda", "Atual"],
-            [prec_min, prec_max, prec_atual],
-            color=["#4CAF50", "#F44336", "#9E9E9E"]
+        desvio = (preco_atual - dados["SMA_10"].mean()) / dados["SMA_10"].mean()
+        ranking.append({"Ativo": nome, "Desvio %": round(desvio * 100, 2)})
+
+        st.download_button(
+            label="📥 Baixar histórico CSV",
+            data=dados.to_csv().encode('utf-8'),
+            file_name=f"{codigo}_historico.csv",
+            mime="text/csv"
         )
-        axb.bar_label(bars, fmt="R$ %.2f")
-        axb.set_title(nome, color="white")
-        axb.set_ylabel("Preço (R$)", color="white")
-        axb.tick_params(colors="white")
-        figs_bar[nome] = figb
 
-        # gráfico de candlestick
-        mc = mpf.make_marketcolors(up='green', down='red', edge='inherit', wick={'up':'green','down':'red'})
-        s  = mpf.make_mpf_style(marketcolors=mc, facecolor='black', edgecolor='white', gridcolor='gray')
-        figc, _ = mpf.plot(
-            dados,
-            type='candle',
-            style=s,
-            returnfig=True,
-            figsize=(6,4),
-            title=f"{nome} — Últimas {periodo}"
-        )
-        figs_candle[nome] = figc
+# Ranking de ativos por desvio
+df_rank = pd.DataFrame(ranking).sort_values("Desvio %")
+st.markdown("### 🧮 Ranking de Ativos por Desvio da Média")
+st.dataframe(df_rank, use_container_width=True)
 
-    # Verificando se df_all não está vazio
-    if df_all:
-        df_sug = pd.DataFrame(df_all)
+# Histórico de trades
+df_hist = pd.DataFrame(historico_trades)
+if not df_hist.empty:
+    st.markdown("### 📜 Histórico de Trades Simulados")
+    st.dataframe(df_hist, use_container_width=True)
+    st.metric("📈 P&L Total", f"R$ {df_hist['Lucro (R$)'].sum():.2f}")
 
-        # tabela geral
-        st.dataframe(df_sug, use_container_width=True)
+# Backtest de compra no fundo e venda no topo
+st.markdown("### 🧪 Backtest de Estratégia (Últimas 24h)")
+inicio_bt = fim - datetime.timedelta(hours=24)
+resultados_bt = []
 
-        # expanders com barras e candles
-        for nm in df_sug["Ativo"]:
-            with st.expander(f"{nm}"):
-                st.pyplot(figs_bar[nm])
-                st.pyplot(figs_candle[nm])
-    else:
-        st.warning("Não foi possível carregar os dados de nenhum ativo. Tente novamente mais tarde.")
+for nome, codigo in ativos.items():
+    dados_bt = obter_dados(codigo, inicio_bt, fim)
+    if dados_bt.empty:
+        continue
+    preco_fundo = dados_bt["Low"].min()
+    preco_topo = dados_bt["High"].max()
+    lucro_bt = preco_topo - preco_fundo
+    perc_bt = (lucro_bt / preco_fundo) * 100
+    resultados_bt.append({
+        "Ativo": nome,
+        "Fundo (R$)": round(preco_fundo, 2),
+        "Topo (R$)": round(preco_topo, 2),
+        "Lucro (R$)": round(lucro_bt, 2),
+        "Lucro (%)": round(perc_bt, 2)
+    })
 
-# --- Tab 2: Simulação & Backtest (permanece igual) ---
-with tab2:
-    st.subheader(f"Simulação & Backtest ({periodo})")
+st.dataframe(pd.DataFrame(resultados_bt), use_container_width=True)
 
-    df = obter_dados(ativo_codigo, inicio, fim)
-    if not df.empty:
-        entry = float(df["Close"].iloc[0])
-        exit_price = float(df["Close"].iloc[-1])
-    else:
-        entry = exit_price = 0.0
-    pnl = exit_price - entry
-
-    inicio24 = fim - datetime.timedelta(hours=24)
-    df24 = obter_dados(ativo_codigo, inicio24, fim, interval="15m")
-    if not df24.empty:
-        min24 = float(df24["Close"].min())
-        max24 = float(df24["Close"].max())
-    else:
-        min24 = max24 = 0.0
-    pnl24 = max24 - min24
-
-    historico = [
-        {"Período": "Simulado",    "Entry (R$)": entry,  "Exit (R$)": exit_price, "P&L (R$)": pnl},
-        {"Período": "Backtest 24h", "Entry (R$)": min24,  "Exit (R$)": max24,      "P&L (R$)": pnl24}
-    ]
-    hist_df = pd.DataFrame(historico)
-
-    col1, col2 = st.columns(2)
-    col1.metric("P&L Simulação",        f"R$ {pnl:.2f}",  delta=f"R$ {pnl:.2f}")
-    col2.metric("P&L Backtest 24h",     f"R$ {pnl24:.2f}", delta=f"R$ {pnl24:.2f}")
-
-    st.markdown("**Histórico de Trades**")
-    st.dataframe(hist_df, use_container_width=True)
-
-    csv = hist_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="📥 Baixar histórico (CSV)",
-        data=csv,
-        file_name="trade_history.csv",
-        mime="text/csv"
-    )
-
-# --- Rodapé ---
+# Rodapé
 st.markdown(
     f"<div style='text-align:center'><small>Atualizado em: {fim.strftime('%d/%m/%Y %H:%M:%S')}</small></div>",
     unsafe_allow_html=True
 )
-
 
