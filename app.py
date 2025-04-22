@@ -73,44 +73,49 @@ def get_commodities_data():
 # Página Inicial
 st.title('Day Trade Dashboard')
 
-# Botões de navegação
-selected_option = st.radio("Escolha o tipo de mercado:", ("Day Trade Cripto", "Day Trade Ações", "Day Trade Commodities"))
+# Obtenção dos dados
+cripto_data = get_cripto_data()
+stock_data = get_stock_data()
+commodities_data = get_commodities_data()
 
-# Exibição dos dados de Cripto
-if selected_option == "Day Trade Cripto":
-    st.subheader("Criptoativos")
-    cripto_data = get_cripto_data()
-    for index, row in cripto_data.iterrows():
-        with st.expander(f"{row['name']}"):
-            st.write(f"Volatilidade: {row['price_change_percentage_24h']}%")
-            st.write(f"Menor preço do dia: {row['low_24h']}")
-            st.write(f"Maior preço do dia: {row['high_24h']}")
-            st.write(f"Preço ideal de compra: {row['buy_price']}")
-            st.write(f"Preço ideal de venda: {row['sell_price']}")
-            st.write("----")
+# Tabela de Criptoativos
+st.subheader("Criptoativos")
+cripto_df = cripto_data[['name', 'current_price', 'price_change_percentage_24h', 'low_24h', 'high_24h', 'buy_price', 'sell_price']]
+cripto_df = cripto_df.rename(columns={
+    'name': 'Ativo',
+    'current_price': 'Preço Atual (USD)',
+    'price_change_percentage_24h': 'Volatilidade (%)',
+    'low_24h': 'Menor Preço do Dia (USD)',
+    'high_24h': 'Maior Preço do Dia (USD)',
+    'buy_price': 'Preço Ideal de Compra (USD)',
+    'sell_price': 'Preço Ideal de Venda (USD)'
+})
+st.dataframe(cripto_df)
 
-# Exibição dos dados de Ações
-elif selected_option == "Day Trade Ações":
-    st.subheader("Ações")
-    stock_data = get_stock_data()
-    for ticker, info in stock_data.items():
-        with st.expander(f"{ticker}"):
-            st.write(f"Volatilidade: {info['volatility']}%")
-            st.write(f"Menor preço do dia: {info['lowest_price']}")
-            st.write(f"Maior preço do dia: {info['highest_price']}")
-            st.write(f"Preço ideal de compra: {info['buy_price']}")
-            st.write(f"Preço ideal de venda: {info['sell_price']}")
-            st.write("----")
+# Tabela de Ações
+st.subheader("Ações")
+stock_df = pd.DataFrame(stock_data).T
+stock_df = stock_df.rename(columns={
+    'volatility': 'Volatilidade (%)',
+    'lowest_price': 'Menor Preço do Dia (USD)',
+    'highest_price': 'Maior Preço do Dia (USD)',
+    'buy_price': 'Preço Ideal de Compra (USD)',
+    'sell_price': 'Preço Ideal de Venda (USD)'
+})
+stock_df['Ativo'] = stock_df.index
+stock_df = stock_df[['Ativo', 'Volatilidade (%)', 'Menor Preço do Dia (USD)', 'Maior Preço do Dia (USD)', 'Preço Ideal de Compra (USD)', 'Preço Ideal de Venda (USD)']]
+st.dataframe(stock_df)
 
-# Exibição dos dados de Commodities
-elif selected_option == "Day Trade Commodities":
-    st.subheader("Commodities")
-    commodities_data = get_commodities_data()
-    for name, info in commodities_data.items():
-        with st.expander(f"{name}"):
-            st.write(f"Volatilidade: {info['volatility']}%")
-            st.write(f"Menor preço do dia: {info['lowest_price']}")
-            st.write(f"Maior preço do dia: {info['highest_price']}")
-            st.write(f"Preço ideal de compra: {info['buy_price']}")
-            st.write(f"Preço ideal de venda: {info['sell_price']}")
-            st.write("----")
+# Tabela de Commodities
+st.subheader("Commodities")
+commodities_df = pd.DataFrame(commodities_data).T
+commodities_df = commodities_df.rename(columns={
+    'volatility': 'Volatilidade (%)',
+    'lowest_price': 'Menor Preço do Dia (USD)',
+    'highest_price': 'Maior Preço do Dia (USD)',
+    'buy_price': 'Preço Ideal de Compra (USD)',
+    'sell_price': 'Preço Ideal de Venda (USD)'
+})
+commodities_df['Ativo'] = commodities_df.index
+commodities_df = commodities_df[['Ativo', 'Volatilidade (%)', 'Menor Preço do Dia (USD)', 'Maior Preço do Dia (USD)', 'Preço Ideal de Compra (USD)', 'Preço Ideal de Venda (USD)']]
+st.dataframe(commodities_df)
