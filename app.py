@@ -1,71 +1,59 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import numpy as np
 
-# Função para obter dados de mercado (cripto ou ações)
-def get_market_data(assets, asset_type="crypto"):
-    data = []
+# Função para gerar dados aleatórios (simulando os dados de ativos)
+def gerar_dados_ativos():
+    ativos = ['Bitcoin (BTC)', 'Ethereum (ETH)', 'Ripple (XRP)', 'Dogecoin (DOGE)', 'Litecoin (LTC)',
+              'Cardano (ADA)', 'Polkadot (DOT)', 'Solana (SOL)', 'Avalanche (AVAX)', 'Chainlink (LINK)',
+              'Shiba Inu (SHIB)', 'Binance Coin (BNB)', 'Polygon (MATIC)', 'Uniswap (UNI)', 'Terra (LUNA)']
+    dados = []
+    for ativo in ativos:
+        volatilidade = np.random.uniform(1, 10)  # Volatilidade aleatória
+        preco_min = np.random.uniform(10, 500)  # Preço mínimo aleatório
+        preco_max = preco_min + np.random.uniform(10, 100)  # Preço máximo aleatório
+        preco_compra = preco_min + (preco_max - preco_min) * np.random.uniform(0.2, 0.4)  # Preço ideal de compra
+        preco_venda = preco_max - (preco_max - preco_min) * np.random.uniform(0.2, 0.4)  # Preço ideal de venda
+        
+        dados.append({
+            'Ativo': ativo,
+            'Volatilidade': f'{volatilidade:.2f}%',
+            'Preço Mínimo': f'${preco_min:.2f}',
+            'Preço Máximo': f'${preco_max:.2f}',
+            'Preço Ideal de Compra': f'${preco_compra:.2f}',
+            'Preço Ideal de Venda': f'${preco_venda:.2f}'
+        })
     
-    for symbol in assets:
-        try:
-            if asset_type == "crypto":
-                # Obtendo dados para criptos
-                url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={symbol}"
-                response = requests.get(url).json()
-                if response:
-                    item = response[0]
-                    data.append({
-                        "name": item.get("name", item.get("symbol")),
-                        "symbol": item.get("symbol").upper(),
-                        "volatility": abs(item.get("price_change_percentage_24h", 0)),
-                        "price": item.get("current_price", 0),
-                        "low": item.get("low_24h", 0),
-                        "high": item.get("high_24h", 0),
-                        "buy_price": item.get("current_price", 0) * 0.98,  # Preço de compra sugerido
-                        "sell_price": item.get("current_price", 0) * 1.02,  # Preço de venda sugerido
-                    })
-            elif asset_type == "stock":
-                # Obtendo dados para ações
-                stock_data = yf.Ticker(symbol).history(period="1d")
-                if not stock_data.empty:
-                    latest_data = stock_data.iloc[-1]
-                    data.append({
-                        "name": symbol.upper(),
-                        "symbol": symbol.upper(),
-                        "volatility": abs(latest_data['Close'] - latest_data['Open']),
-                        "price": latest_data['Close'],
-                        "low": latest_data['Low'],
-                        "high": latest_data['High'],
-                        "buy_price": latest_data['Close'] * 0.98,  # Preço de compra sugerido
-                        "sell_price": latest_data['Close'] * 1.02,  # Preço de venda sugerido
-                    })
-        except Exception as e:
-            st.error(f"Erro ao obter dados para {symbol}: {str(e)}")
+    return pd.DataFrame(dados)
 
-    return pd.DataFrame(data)
+# Título da aplicação
+st.title("Trademaster AI - Dashboard de Day Trade")
 
-# Lista de ativos para criptos e ações
-cryptos = ['bitcoin', 'ethereum', 'ripple', 'dogecoin', 'litecoin']
-stocks = ['TSLA', 'AMZN', 'AAPL', 'META', 'NFLX', 'NVDA', 'GME', 'AMC', 'SPOT', 'PLTR', 'ROKU', 'SQ', 'ZM', 'DOCU', 'BYND', 'COIN', 'HOOD', 'MRNA', 'SNOW']
+# Barra lateral para seleção de categorias
+opcao = st.sidebar.selectbox(
+    'Escolha uma categoria de ativos:',
+    ['Cripto', 'Ações', 'Commodities']
+)
 
-# Interface do Streamlit
-st.title("💹 Dashboard de Ativos Financeiros")
+# Exibindo os dados de acordo com a categoria escolhida
+if opcao == 'Cripto':
+    st.header("Ativos Cripto")
+    ativos_cripto = gerar_dados_ativos()
+    st.dataframe(ativos_cripto)
 
-# Opções de visualização
-option = st.selectbox("Escolha o tipo de ativo:", ("Criptomoedas", "Ações"))
+elif opcao == 'Ações':
+    st.header("Ativos Ações")
+    ativos_acoes = gerar_dados_ativos()
+    st.dataframe(ativos_acoes)
 
-# Painel de Criptomoedas
-if option == "Criptomoedas":
-    st.subheader("📊 Criptomoedas (últimas 24h)")
-    crypto_df = get_market_data(cryptos, asset_type="crypto")
-    if not crypto_df.empty:
-        crypto_df_sorted = crypto_df.sort_values("volatility", ascending=False)
-        st.dataframe(crypto_df_sorted[["name", "symbol", "price", "low", "high", "buy_price", "sell_price", "volatility"]])
+elif opcao == 'Commodities':
+    st.header("Ativos Commodities")
+    ativos_commodities = gerar_dados_ativos()
+    st.dataframe(ativos_commodities)
 
-# Painel de Ações
-elif option == "Ações":
-    st.subheader("📊 Ações (últimas 24h)")
-    stock_df = get_market_data(stocks, asset_type="stock")
-    if not stock_df.empty:
-        stock_df_sorted = stock_df.sort_values("volatility", ascending=False)
-        st.dataframe(stock_df_sorted[["name", "symbol", "price", "low", "high", "buy_price", "sell_price", "volatility"]])
+# Informações adicionais de como usar
+st.sidebar.markdown("""
+### Sobre:
+- Este aplicativo exibe dados aleatórios de ativos em tempo real, com base nas categorias de Cripto, Ações e Commodities.
+- Use os botões para navegar entre as categorias e visualizar informações como volatilidade, preços mínimos e máximos, e preços ideais de compra e venda.
+""")
