@@ -13,7 +13,7 @@ def obter_dados_ativos(ativos):
             if 'Adj Close' in df.columns:
                 dados.append(df)
             else:
-                st.warning(f"Coluna 'Adj Close' não encontrada para {ativo}")
+                st.warning(f"Coluna 'Adj Close' não encontrada para {ativo}. Dados disponíveis: {df.columns}")
             time.sleep(0.15)  # Aumento do tempo de espera entre as requisições para evitar rate limit
         except (yf.YFRateLimitError, yf.YFPricesMissingError) as e:
             st.warning(f"Erro ao obter dados de {ativo}: {e}")
@@ -87,4 +87,3 @@ if 'Adj Close' in df_resultado.columns:
         st.write(f"**{ativo}**: Compra: {preco['Compra']:.2f} | Venda: {preco['Venda']:.2f}")
 else:
     st.write("Não foi possível obter a coluna 'Adj Close' nos dados dos ativos.")
-
