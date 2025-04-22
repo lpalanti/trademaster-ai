@@ -12,8 +12,9 @@ def get_usd_brl():
     try:
         data = yf.download("USDBRL=X", period="1d", interval="1m")
         return data["Close"].iloc[-1]
-    except:
-        return 5.0
+    except Exception as e:
+        st.error(f"Erro ao buscar cotação do USD/BRL: {e}")
+        return 5.0  # Valor padrão em caso de erro
 
 usd_brl = get_usd_brl()
 
@@ -38,30 +39,72 @@ CRYPTO = {
 }
 
 def fetch_crypto_data(coin_id, usd_brl):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc?vs_currency=usd&days=1"
-    r = requests.get(url).json()
-    if not r: return pd.DataFrame(), {}
+    try:
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc?vs_currency=usd&days=1"
+        r = requests.get(url).json()
+        if not r: return pd.DataFrame(), {}
 
-    df = pd.DataFrame(r, columns=["timestamp", "Open", "High", "Low", "Close"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df.set_index("timestamp", inplace=True)
-    df[["Open", "High", "Low", "Close"]] *= usd_brl
+        df = pd.DataFrame(r, columns=["timestamp", "Open", "High", "Low", "Close"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df.set_index("timestamp", inplace=True)
+        df[["Open", "High", "Low", "Close"]] *= usd_brl
 
-    max_price = df["High"].max()
-    min_price = df["Low"].min()
-    vol = max_price - min_price
-    vol_pct = (vol / min_price) * 100
-    buy = min_price + 0.1 * vol
-    sell = max_price - 0.1 * vol
+        max_price = df["High"].max()
+        min_price = df["Low"].min()
+        vol = max_price - min_price
+        vol_pct = (vol / min_price) * 100
+        buy = min_price + 0.1 * vol
+        sell = max_price - 0.1 * vol
 
-    return df, {
-        "Volatilidade": f"R$ {vol:.2f}",
-        "% Volatilidade": f"{vol_pct:.2f}%",
-        "Menor Preço do Dia": f"R$ {min_price:.2f}",
-        "Maior Preço do Dia": f"R$ {max_price:.2f}",
-        "Ideal Compra": f"R$ {buy:.2f}",
-        "Ideal Venda": f"R$ {sell:.2f}"
-    }
+        return df, {
+            "Volatilidade": f"R$ {vol:.2f}",
+            "% Volatilidade": f"{vol_pct:.2f}%",
+            "Menor Preço do Dia": f"R$ {min_price:.2f}",
+            "Maior Preço do Dia": f"R$ {max_price:.2f}",
+            "Ideal Compra": f"R$ {buy:.2f}",
+            "Ideal Venda": f"R$ {sell:.2f}"
+        }
+    except Exception as e:
+        st.error(f"Erro ao buscar dados de criptomoeda: {coin_id} - {e}")
+        return pd.DataFrame(), {}
+
+# ======= AÇÕES =======
+STOCKS = [
+    "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT",
+    "PLTR", "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW"
+]
+
+def fetch_yahoo_data(ticker, usd_brl):
+    try:
+        df = yf.download(ticker, period="1d", interval="5m")
+        if df.empty: return pd.DataFrame(), {}
+
+        df[["Open", "High", "Low", "Close"]] *= usd_brl
+        max_price = df["High"].max()
+        min_price = df["Low"].min()
+        vol = max_price - min_price
+        vol_pct = (vol / min_price) * 100
+        buy = min_price + 0.1 * vol
+        sell = max_price - 0.1 * vol
+
+        return df, {
+            "Volatilidade": f"R$ {vol:.2f}",
+            "% Volatilidade": f"{vol_pct:.2f}%",
+            "Menor Preço do Dia": f"R$ {min_price:.2f}",
+            "Maior Preço do Dia": f"R$ {max_price:.2f}",
+            "Ideal Compra": f"R$ {buy:.2f}",
+            "Ideal Venda": f"R$ {sell:.2f}"
+        }
+    except Exception as e:
+        st.error(f"Erro ao buscar dados da ação: {ticker} - {e}")
+        return pd.DataFrame(), {}
+
+# ======= COMMODITIES =======
+COMMODITIES = {
+    "Ouro": "GC=F", "Brent": "BZ=F", "WTI": "CL=F", "Cobre": "HG=F",
+    "Algodão": "CT=F", "Café": "KC=F", "Soja": "ZS=F", "Milho": "ZC=F",
+    "Açúcar": "SB=F", "Paládio": "PA=F"
+}
 
 st.header("💰 Criptomoedas")
 crypto_data = []
@@ -76,62 +119,28 @@ for nome, coin_id in CRYPTO.items():
     df, _ = fetch_crypto_data(coin_id, usd_brl)
     plot_candlestick(df, nome)
 
-# ======= AÇÕES =======
-STOCKS = [
-    "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT",
-    "PLTR", "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW"
-]
-
-def fetch_yahoo_data(ticker):
-    df = yf.download(ticker, period="1d", interval="5m")
-    if df.empty: return pd.DataFrame(), {}
-
-    df[["Open", "High", "Low", "Close"]] *= usd_brl
-    max_price = df["High"].max()
-    min_price = df["Low"].min()
-    vol = max_price - min_price
-    vol_pct = (vol / min_price) * 100
-    buy = min_price + 0.1 * vol
-    sell = max_price - 0.1 * vol
-
-    return df, {
-        "Volatilidade": f"R$ {vol:.2f}",
-        "% Volatilidade": f"{vol_pct:.2f}%",
-        "Menor Preço do Dia": f"R$ {min_price:.2f}",
-        "Maior Preço do Dia": f"R$ {max_price:.2f}",
-        "Ideal Compra": f"R$ {buy:.2f}",
-        "Ideal Venda": f"R$ {sell:.2f}"
-    }
-
 st.header("📊 Ações")
 stock_data = []
 for ticker in STOCKS:
-    df, info = fetch_yahoo_data(ticker)
+    df, info = fetch_yahoo_data(ticker, usd_brl)
     if info:
         info["Ativo"] = ticker
         stock_data.append(info)
 
 st.dataframe(pd.DataFrame(stock_data), use_container_width=True)
 for ticker in STOCKS:
-    df, _ = fetch_yahoo_data(ticker)
+    df, _ = fetch_yahoo_data(ticker, usd_brl)
     plot_candlestick(df, ticker)
-
-# ======= COMMODITIES =======
-COMMODITIES = {
-    "Ouro": "GC=F", "Brent": "BZ=F", "WTI": "CL=F", "Cobre": "HG=F",
-    "Algodão": "CT=F", "Café": "KC=F", "Soja": "ZS=F", "Milho": "ZC=F",
-    "Açúcar": "SB=F", "Paládio": "PA=F"
-}
 
 st.header("🛢️ Commodities")
 commodity_data = []
 for nome, ticker in COMMODITIES.items():
-    df, info = fetch_yahoo_data(ticker)
+    df, info = fetch_yahoo_data(ticker, usd_brl)
     if info:
         info["Ativo"] = nome
         commodity_data.append(info)
 
 st.dataframe(pd.DataFrame(commodity_data), use_container_width=True)
 for nome, ticker in COMMODITIES.items():
-    df, _ = fetch_yahoo_data(ticker)
+    df, _ = fetch_yahoo_data(ticker, usd_brl)
     plot_candlestick(df, nome)
