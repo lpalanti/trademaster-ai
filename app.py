@@ -40,7 +40,12 @@ def get_volatility_data():
         return pd.DataFrame([{
             "name": item["name"],
             "symbol": item["symbol"].upper(),
-            "volatility": abs(item["price_change_percentage_24h"] or 0)
+            "volatility": abs(item["price_change_percentage_24h"] or 0),
+            "price": item["current_price"],
+            "low_24h": item["low_24h"],
+            "high_24h": item["high_24h"],
+            "buy_suggestion": round(item["current_price"] * 0.95, 4),
+            "sell_suggestion": round(item["current_price"] * 1.05, 4)
         } for item in data])
     return pd.DataFrame()
 
@@ -63,6 +68,36 @@ fig_vol.update_layout(
     yaxis=dict(autorange="reversed")
 )
 st.plotly_chart(fig_vol, use_container_width=True)
+
+# -----------------------------
+# TABELA DETALHADA
+# -----------------------------
+
+st.markdown("### 🧾 Detalhes dos Ativos (Valores em USD)")
+vol_df_sorted["volatility"] = vol_df_sorted["volatility"].map(lambda x: f"{x:.2f}%")
+vol_df_sorted["price"] = vol_df_sorted["price"].map(lambda x: f"${x:.4f}")
+vol_df_sorted["low_24h"] = vol_df_sorted["low_24h"].map(lambda x: f"${x:.4f}")
+vol_df_sorted["high_24h"] = vol_df_sorted["high_24h"].map(lambda x: f"${x:.4f}")
+vol_df_sorted["buy_suggestion"] = vol_df_sorted["buy_suggestion"].map(lambda x: f"${x:.4f}")
+vol_df_sorted["sell_suggestion"] = vol_df_sorted["sell_suggestion"].map(lambda x: f"${x:.4f}")
+
+st.dataframe(
+    vol_df_sorted[[
+        "name", "symbol", "volatility", "price",
+        "low_24h", "high_24h", "buy_suggestion", "sell_suggestion"
+    ]].rename(columns={
+        "name": "Nome",
+        "symbol": "Ticker",
+        "volatility": "Volatilidade (24h)",
+        "price": "Preço atual",
+        "low_24h": "Mín. do dia",
+        "high_24h": "Máx. do dia",
+        "buy_suggestion": "Sugestão de Compra",
+        "sell_suggestion": "Sugestão de Venda"
+    }),
+    use_container_width=True,
+    height=500
+)
 
 # -----------------------------
 # ATIVO SELECIONADO
