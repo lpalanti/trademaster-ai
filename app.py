@@ -62,3 +62,23 @@ def obter_dados_acoes():
 # Função principal do app
 def main():
     # Definindo título
+    st.title("Monitor de Criptomoedas e Ações")
+
+    # Exibir dados de criptomoedas
+    st.header("Dados de Criptomoedas")
+    df_cripto = obter_dados_cripto()
+    st.write(df_cripto)
+
+    # Exibir dados de ações
+    st.header("Dados de Ações")
+    df_acoes = obter_dados_acoes()
+    st.write(df_acoes)
+
+    # Atualização automática a cada 1 minuto
+    while True:
+        time.sleep(60)  # Espera 60 segundos
+        st.experimental_rerun()  # Atualiza a página
+
+# Verifica se o arquivo está sendo executado diretamente e chama a função main
+if __name__ == "__main__":
+    main()
