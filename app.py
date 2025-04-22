@@ -14,6 +14,12 @@ def get_cripto_data():
     }
     response = requests.get(url, params=params)
     data = response.json()
+
+    # Adicionando cálculo de preço ideal de compra e venda com 5% de margem
+    for item in data:
+        item['buy_price'] = item['current_price'] * 0.95  # 5% de desconto para compra
+        item['sell_price'] = item['current_price'] * 1.05  # 5% de aumento para venda
+
     return pd.DataFrame(data)
 
 # Função para obter dados de ações
@@ -31,8 +37,8 @@ def get_stock_data():
             "volatility": hist['Close'].pct_change().std() * 100,
             "lowest_price": hist['Low'].iloc[0],
             "highest_price": hist['High'].iloc[0],
-            "buy_price": hist['Close'].iloc[0] * 0.98,  # Exemplo de preço de compra
-            "sell_price": hist['Close'].iloc[0] * 1.02  # Exemplo de preço de venda
+            "buy_price": hist['Close'].iloc[0] * 0.95,  # 5% de desconto para compra
+            "sell_price": hist['Close'].iloc[0] * 1.05  # 5% de aumento para venda
         }
     return data
 
@@ -59,8 +65,8 @@ def get_commodities_data():
             "volatility": hist['Close'].pct_change().std() * 100,
             "lowest_price": hist['Low'].iloc[0],
             "highest_price": hist['High'].iloc[0],
-            "buy_price": hist['Close'].iloc[0] * 0.98,  # Exemplo de preço de compra
-            "sell_price": hist['Close'].iloc[0] * 1.02  # Exemplo de preço de venda
+            "buy_price": hist['Close'].iloc[0] * 0.95,  # 5% de desconto para compra
+            "sell_price": hist['Close'].iloc[0] * 1.05  # 5% de aumento para venda
         }
     return data
 
@@ -108,3 +114,4 @@ elif selected_option == "Day Trade Commodities":
         st.write(f"Preço ideal de compra: {info['buy_price']}")
         st.write(f"Preço ideal de venda: {info['sell_price']}")
         st.write("----")
+
