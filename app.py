@@ -56,8 +56,11 @@ with st.spinner("Buscando dados em tempo real..."):
 # Criar DataFrame com os resultados
 df_resultado = pd.DataFrame(analises)
 
-# Filtrar apenas ativos com dados válidos
-df_validos = df_resultado[df_resultado['Variação (%)'].notnull()]
+# Garantir que a coluna 'Variação (%)' existe antes de filtrar
+if 'Variação (%)' in df_resultado.columns:
+    df_validos = df_resultado[df_resultado['Variação (%)'].notnull()]
+else:
+    df_validos = pd.DataFrame()
 
 # Exibir tabela principal
 st.dataframe(df_resultado, use_container_width=True)
