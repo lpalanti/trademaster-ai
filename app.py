@@ -1,121 +1,146 @@
 import streamlit as st
 import requests
-import yfinance as yf
 import pandas as pd
 
-# Função para obter dados de criptoativos
-@st.cache_data(ttl=180)  # Cache com tempo de expiração de 180 segundos (3 minutos)
-def get_cripto_data():
-    url = "https://api.coingecko.com/api/v3/coins/markets"
-    params = {
-        'vs_currency': 'usd',
-        'ids': 'bitcoin,ethereum,ripple,dogecoin,litecoin,cardano,polkadot,solana,avalanche,chainlink,shiba-inu,binancecoin,polygon,uniswap,terra',
-        'order': 'market_cap_desc'
-    }
-    response = requests.get(url, params=params)
+API_KEY = 'IOKSXPMXJXFIKTI3'
+
+# Ativos
+CRYPTO = {
+    "Bitcoin": "BTC",
+    "Ethereum": "ETH",
+    "Ripple": "XRP",
+    "Dogecoin": "DOGE",
+    "Litecoin": "LTC",
+    "Cardano": "ADA",
+    "Polkadot": "DOT",
+    "Solana": "SOL",
+    "Avalanche": "AVAX",
+    "Chainlink": "LINK",
+    "Shiba Inu": "SHIB",
+    "Binance Coin": "BNB",
+    "Polygon": "MATIC",
+    "Uniswap": "UNI",
+    "Terra": "LUNA"
+}
+
+STOCKS = {
+    "Tesla": "TSLA",
+    "Amazon": "AMZN",
+    "Apple": "AAPL",
+    "Meta": "META",
+    "Netflix": "NFLX",
+    "Nvidia": "NVDA",
+    "GameStop": "GME",
+    "AMC Entertainment": "AMC",
+    "Spotify": "SPOT",
+    "Palantir": "PLTR",
+    "Roku": "ROKU",
+    "Square": "SQ",
+    "Zoom Video": "ZM",
+    "DocuSign": "DOCU",
+    "Beyond Meat": "BYND",
+    "Coinbase": "COIN",
+    "Robinhood": "HOOD",
+    "Moderna": "MRNA",
+    "Snowflake": "SNOW"
+}
+
+COMMODITIES = {
+    "Ouro": "XAUUSD",
+    "Petróleo Brent": "BZ",
+    "Petróleo WTI": "CL",
+    "Cobre": "HG",
+    "Algodão": "CT",
+    "Café": "KC",
+    "Soja": "ZS",
+    "Milho": "ZC",
+    "Açúcar": "SB",
+    "Paládio": "PA"
+}
+
+
+@st.cache_data(ttl=180)
+def get_usd_brl():
+    url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=BRL&apikey={API_KEY}"
+    response = requests.get(url).json()
+    try:
+        rate = float(response['Realtime Currency Exchange Rate']['5. Exchange Rate'])
+    except:
+        rate = 5.0  # fallback
+    return rate
+
+
+@st.cache_data(ttl=180)
+def fetch_data(symbol, market="stock", usd_brl=5.0):
+    if market == "crypto":
+        url = f"https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_INTRADAY&symbol={symbol}&market=USD&apikey={API_KEY}"
+    else:
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&apikey={API_KEY}"
+
+    response = requests.get(url)
     data = response.json()
 
-    # Adicionando cálculo de preço ideal de compra e venda com 5% de margem
-    for item in data:
-        item['buy_price'] = item['current_price'] * 0.95  # 5% de desconto para compra
-        item['sell_price'] = item['current_price'] * 1.05  # 5% de aumento para venda
+    try:
+        if market == "crypto":
+            ts = data["Time Series (Digital Currency Intraday)"]
+        else:
+            ts = data["Time Series (5min)"]
 
-    return pd.DataFrame(data)
+        df = pd.DataFrame(ts).T.astype(float)
+        high = df["2. high"].max()
+        low = df["3. low"].min()
 
-# Função para obter dados de ações
-@st.cache_data(ttl=180)  # Cache com tempo de expiração de 180 segundos (3 minutos)
-def get_stock_data():
-    tickers = [
-        "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT", "PLTR",
-        "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW"
-    ]
-    data = {}
-    for ticker in tickers:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1d")
-        data[ticker] = {
-            "volatility": hist['Close'].pct_change().std() * 100,
-            "lowest_price": hist['Low'].iloc[0],
-            "highest_price": hist['High'].iloc[0],
-            "buy_price": hist['Close'].iloc[0] * 0.95,  # 5% de desconto para compra
-            "sell_price": hist['Close'].iloc[0] * 1.05  # 5% de aumento para venda
+        # Conversão para reais
+        high *= usd_brl
+        low *= usd_brl
+        volatility = high - low
+        volatility_pct = (volatility / low) * 100
+        ideal_buy = low + volatility * 0.1
+        ideal_sell = high - volatility * 0.1
+
+        return {
+            "Volatilidade": f"R$ {volatility:.2f}",
+            "% Volatilidade": f"{volatility_pct:.2f}%",
+            "Menor Preço do Dia": f"R$ {low:.2f}",
+            "Maior Preço do Dia": f"R$ {high:.2f}",
+            "Ideal Compra": f"R$ {ideal_buy:.2f}",
+            "Ideal Venda": f"R$ {ideal_sell:.2f}"
         }
-    return data
-
-# Função para obter dados de commodities
-@st.cache_data(ttl=180)  # Cache com tempo de expiração de 180 segundos (3 minutos)
-def get_commodities_data():
-    commodities = {
-        "Gold": "XAU/USD",
-        "Brent Crude Oil": "BZ=F",
-        "WTI Crude Oil": "CL=F",
-        "Copper": "HG=F",
-        "Cotton": "CT=F",
-        "Coffee": "KC=F",
-        "Soybeans": "ZS=F",
-        "Corn": "ZC=F",
-        "Sugar": "SB=F",
-        "Palladium": "PA=F"
-    }
-    data = {}
-    for name, symbol in commodities.items():
-        commodity = yf.Ticker(symbol)
-        hist = commodity.history(period="1d")
-        data[name] = {
-            "volatility": hist['Close'].pct_change().std() * 100,
-            "lowest_price": hist['Low'].iloc[0],
-            "highest_price": hist['High'].iloc[0],
-            "buy_price": hist['Close'].iloc[0] * 0.95,  # 5% de desconto para compra
-            "sell_price": hist['Close'].iloc[0] * 1.05  # 5% de aumento para venda
+    except:
+        return {
+            "Volatilidade": "-",
+            "% Volatilidade": "-",
+            "Menor Preço do Dia": "-",
+            "Maior Preço do Dia": "-",
+            "Ideal Compra": "-",
+            "Ideal Venda": "-"
         }
-    return data
 
-# Página Inicial
-st.title('Day Trade Dashboard')
 
-# Obtenção dos dados
-cripto_data = get_cripto_data()
-stock_data = get_stock_data()
-commodities_data = get_commodities_data()
+def render_category(name, data_dict, market_type, usd_brl):
+    st.subheader(name)
+    rows = []
+    for label, symbol in data_dict.items():
+        data = fetch_data(symbol, market_type, usd_brl)
+        row = {"Ativo": label}
+        row.update(data)
+        rows.append(row)
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True)
 
-# Tabela de Criptoativos
-st.subheader("Criptoativos")
-cripto_df = cripto_data[['name', 'current_price', 'price_change_percentage_24h', 'low_24h', 'high_24h', 'buy_price', 'sell_price']]
-cripto_df = cripto_df.rename(columns={
-    'name': 'Ativo',
-    'current_price': 'Preço Atual (USD)',
-    'price_change_percentage_24h': 'Volatilidade (%)',
-    'low_24h': 'Menor Preço do Dia (USD)',
-    'high_24h': 'Maior Preço do Dia (USD)',
-    'buy_price': 'Preço Ideal de Compra (USD)',
-    'sell_price': 'Preço Ideal de Venda (USD)'
-})
-st.dataframe(cripto_df)
 
-# Tabela de Ações
-st.subheader("Ações")
-stock_df = pd.DataFrame(stock_data).T
-stock_df = stock_df.rename(columns={
-    'volatility': 'Volatilidade (%)',
-    'lowest_price': 'Menor Preço do Dia (USD)',
-    'highest_price': 'Maior Preço do Dia (USD)',
-    'buy_price': 'Preço Ideal de Compra (USD)',
-    'sell_price': 'Preço Ideal de Venda (USD)'
-})
-stock_df['Ativo'] = stock_df.index
-stock_df = stock_df[['Ativo', 'Volatilidade (%)', 'Menor Preço do Dia (USD)', 'Maior Preço do Dia (USD)', 'Preço Ideal de Compra (USD)', 'Preço Ideal de Venda (USD)']]
-st.dataframe(stock_df)
+# Layout
+st.set_page_config(page_title="TradeMaster AI", layout="wide")
+st.title("📊 TradeMaster AI — Painel em Reais (R$) Atualizado a cada 3 minutos")
 
-# Tabela de Commodities
-st.subheader("Commodities")
-commodities_df = pd.DataFrame(commodities_data).T
-commodities_df = commodities_df.rename(columns={
-    'volatility': 'Volatilidade (%)',
-    'lowest_price': 'Menor Preço do Dia (USD)',
-    'highest_price': 'Maior Preço do Dia (USD)',
-    'buy_price': 'Preço Ideal de Compra (USD)',
-    'sell_price': 'Preço Ideal de Venda (USD)'
-})
-commodities_df['Ativo'] = commodities_df.index
-commodities_df = commodities_df[['Ativo', 'Volatilidade (%)', 'Menor Preço do Dia (USD)', 'Maior Preço do Dia (USD)', 'Preço Ideal de Compra (USD)', 'Preço Ideal de Venda (USD)']]
-st.dataframe(commodities_df)
+usd_brl = get_usd_brl()
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    render_category("💰 Cripto", CRYPTO, "crypto", usd_brl)
+
+with col2:
+    render_category("📈 Ações", STOCKS, "stock", usd_brl)
+
+with col3:
+    render_category("🛢️ Commodities", COMMODITIES, "stock", usd_brl)
