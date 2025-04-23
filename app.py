@@ -1,157 +1,88 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-from pycoingecko import CoinGeckoAPI
+import plotly.graph_objects as go
 import requests
+import time
 
-# Configurações do Telegram
-TELEGRAM_TOKEN = '7971840892:AAH8sIg3iQUI7jQkMSd3YrYPaU4giRDVRQc'
-CHAT_ID = '1963421158'
+# Função para obter os dados da ação
+def fetch_stock_data(tickers):
+    data = {}
+    for ticker in tickers:
+        stock = yf.Ticker(ticker)
+        info = stock.history(period="1d")
+        data[ticker] = {
+            "Nome": ticker,
+            "Preço": info["Close"].iloc[-1],
+            "Variação": info["Close"].pct_change().iloc[-1] * 100,
+            "Menor preço do dia": info["Low"].iloc[-1],
+            "Maior preço do dia": info["High"].iloc[-1],
+            "Preço de compra sugerido": info["Close"].iloc[-1] * 0.95,  # 5% de desconto
+            "Preço de venda sugerido": info["Close"].iloc[-1] * 1.05,  # 5% de acréscimo
+        }
+    return data
 
-def send_telegram_alert(message):
-    url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage'
-    data = {'chat_id': CHAT_ID, 'text': message}
-    requests.post(url, data=data)
+# Função para obter o gráfico de candle
+def plot_candle_chart(ticker, period):
+    stock = yf.Ticker(ticker)
+    data = stock.history(period=period)
+    fig = go.Figure(data=[go.Candlestick(x=data.index,
+                                        open=data['Open'],
+                                        high=data['High'],
+                                        low=data['Low'],
+                                        close=data['Close'])])
+    fig.update_layout(title=f'Gráfico de {ticker} - Período: {period}',
+                      xaxis_title='Data',
+                      yaxis_title='Preço (R$)')
+    return fig
 
-# Função painel Cripto
-def painel_cripto():
-    st.subheader("Painel Criptomoedas")
-    cg = CoinGeckoAPI()
-    coins = [
-        "bitcoin", "ethereum", "ripple", "dogecoin", "litecoin",
-        "cardano", "polkadot", "solana", "avalanche", "chainlink",
-        "shiba-inu", "binancecoin", "polygon", "uniswap", "terra-luna"
-    ]
-    cripto_data = []
+# Lista de ações com a adição de 10 novos ativos
+tickers = [
+    "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT", "PLTR",
+    "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW", "BA", "GS",
+    "MSFT", "IBM", "BABA", "GOOG", "DIS", "WMT"
+]
 
-    for coin in coins:
-        try:
-            data = cg.get_price(ids=coin, vs_currencies='brl', include_24hr_change=True)
-            price = data[coin]['brl']
-            change = data[coin]['brl_24h_change']
-            preco_compra = price * 0.95
-            preco_venda = price * 1.05
+# Atualizar os dados das ações a cada 3 minutos
+@st.cache(ttl=180)
+def get_stock_data():
+    return fetch_stock_data(tickers)
 
-            if price <= preco_compra:
-                send_telegram_alert(
-                    f"🚨 Cripto em oportunidade!\n"
-                    f"{coin.upper()} abaixo do ideal de compra.\n"
-                    f"💰 Atual: R$ {price:.2f}\n"
-                    f"🎯 Alvo: R$ {preco_compra:.2f}"
-                )
+# Função para exibir as informações das ações
+def display_stock_data():
+    df = pd.DataFrame(get_stock_data()).T
+    df = df.sort_values(by='Preço', ascending=False)  # Ordenando por preço (pode ser alterado conforme necessidade)
 
-            cripto_data.append({
-                "Cripto": coin.upper(),
-                "Preço atual (R$)": f"R$ {price:.2f}",
-                "Variação 24h (%)": f"{change:.2f}%",
-                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
-                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
-            })
-        except Exception as e:
-            st.warning(f"Erro ao buscar {coin}: {e}")
+    st.write(df)
 
-    df = pd.DataFrame(cripto_data)
-    st.table(df)
+    return df
 
-# Função painel Ações
-def painel_acoes():
-    st.subheader("Painel Ações")
-    stock_list = [
-        "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT",
-        "PLTR", "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW"
-    ]
-    stock_data = []
+# Função principal de exibição
+def main():
+    st.title("Painel de Ações")
 
-    for ticker in stock_list:
-        try:
-            stock = yf.Ticker(ticker)
-            df_hist = stock.history(period="1d", interval="1m")
-            if df_hist.empty:
-                continue
+    # Exibir painel de ações
+    st.subheader("Painel de Ações")
+    df = display_stock_data()
 
-            price = df_hist['Close'][-1]
-            low = df_hist['Low'].min()
-            high = df_hist['High'].max()
-            change = ((price - df_hist['Open'][0]) / df_hist['Open'][0]) * 100
-            preco_compra = price * 0.95
-            preco_venda = price * 1.05
+    # Classificar por coluna ao clicar no título da coluna
+    sort_by = st.selectbox("Classificar por", ['Preço', 'Variação', 'Menor preço do dia', 'Maior preço do dia'])
+    if sort_by:
+        df = df.sort_values(by=sort_by, ascending=False)
 
-            if price <= preco_compra:
-                send_telegram_alert(
-                    f"📉 Ação em oportunidade!\n"
-                    f"{ticker} abaixo do ideal de compra.\n"
-                    f"💰 Atual: R$ {price:.2f}\n"
-                    f"🎯 Alvo: R$ {preco_compra:.2f}"
-                )
+    # Adicionar gráfico de velas ao clicar no ativo
+    selected_ticker = st.selectbox("Selecione uma Ação para ver o gráfico de velas", df['Nome'].tolist())
 
-            stock_data.append({
-                "Ação": ticker,
-                "Preço Atual (R$)": f"R$ {price:.2f}",
-                "Mínimo do Dia (R$)": f"R$ {low:.2f}",
-                "Máximo do Dia (R$)": f"R$ {high:.2f}",
-                "Variação (%)": f"{change:.2f}%",
-                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
-                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
-            })
-        except Exception as e:
-            st.warning(f"Erro em {ticker}: {e}")
+    # Filtro de período
+    period = st.selectbox(
+        "Selecione o período para o gráfico",
+        ["1h", "3h", "6h", "12h", "24h", "5d", "15d", "1mo", "1y", "5y"]
+    )
 
-    df = pd.DataFrame(stock_data)
-    st.table(df)
+    if selected_ticker:
+        fig = plot_candle_chart(selected_ticker, period)
+        st.plotly_chart(fig)
 
-# Função painel Commodities
-def painel_commodities():
-    st.subheader("Painel Commodities")
-    commodity_list = [
-        "XAUUSD=X", "BZ=F", "CL=F", "HG=F", "CT=F", "KC=F", "ZS=F", "ZC=F", "SB=F", "PA=F"
-    ]
-    commodities_data = []
-
-    for commodity in commodity_list:
-        try:
-            com = yf.Ticker(commodity)
-            df_hist = com.history(period="1d", interval="1m")
-            if df_hist.empty:
-                continue
-
-            price = df_hist['Close'][-1]
-            low = df_hist['Low'].min()
-            high = df_hist['High'].max()
-            change = ((price - df_hist['Open'][0]) / df_hist['Open'][0]) * 100
-            preco_compra = price * 0.95
-            preco_venda = price * 1.05
-
-            if price <= preco_compra:
-                send_telegram_alert(
-                    f"🛢️ Commodity em oportunidade!\n"
-                    f"{commodity} abaixo do ideal de compra.\n"
-                    f"💰 Atual: R$ {price:.2f}\n"
-                    f"🎯 Alvo: R$ {preco_compra:.2f}"
-                )
-
-            commodities_data.append({
-                "Commodity": commodity,
-                "Preço Atual (R$)": f"R$ {price:.2f}",
-                "Mínimo do Dia (R$)": f"R$ {low:.2f}",
-                "Máximo do Dia (R$)": f"R$ {high:.2f}",
-                "Variação (%)": f"{change:.2f}%",
-                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
-                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
-            })
-        except Exception as e:
-            st.warning(f"Erro em {commodity}: {e}")
-
-    df = pd.DataFrame(commodities_data)
-    st.table(df)
-
-# Interface principal
-st.title("🔎 Painel de Análise de Ativos")
-
-aba = st.radio("Selecione o tipo de ativo:", ["Criptomoedas", "Ações", "Commodities"])
-
-if aba == "Criptomoedas":
-    painel_cripto()
-elif aba == "Ações":
-    painel_acoes()
-elif aba == "Commodities":
-    painel_commodities()
+# Executar a aplicação
+if __name__ == "__main__":
+    main()
