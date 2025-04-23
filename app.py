@@ -1,55 +1,49 @@
 import streamlit as st
-import pandas as pd
 import yfinance as yf
+import pandas as pd
+import plotly.graph_objs as go
 
-st.set_page_config(page_title="TradeMaster AI", layout="wide")
+# Título da aplicação
+st.title('Ferramenta de Análise para Day Trade')
 
-st.title("📈 TradeMaster AI")
+# Coletando o ticker de uma ação através de input
+ticker = st.text_input('Digite o Ticker da Ação:', 'AAPL')
 
-# Lista de ativos com maior histórico de volatilidade (exemplo)
-ativos = [
-    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA",
-    "ABEV3.SA", "WEGE3.SA", "MGLU3.SA", "LREN3.SA", "B3SA3.SA",
-    "JBSS3.SA", "GGBR4.SA", "RENT3.SA", "CSNA3.SA", "RAIL3.SA",
-    "PRIO3.SA", "BRKM5.SA", "UGPA3.SA", "SUZB3.SA", "EMBR3.SA"
-]
+# Baixando os dados históricos da ação
+data = yf.download(ticker, start='2020-01-01', end='2025-01-01')
 
-# Sidebar
-st.sidebar.header("Configurações")
-ativo_selecionado = st.sidebar.selectbox("Selecione o ativo", ativos)
+# Exibindo os dados históricos
+st.write('Dados Históricos:', data.tail())
 
-periodo = st.sidebar.selectbox(
-    "Período de análise",
-    ("7d", "15d", "30d", "90d", "180d", "1y"),
-    index=2
-)
+# Calculando indicadores técnicos
+data['SMA50'] = data['Close'].rolling(window=50).mean()
+data['SMA200'] = data['Close'].rolling(window=200).mean()
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("Desenvolvido por TradeMaster AI")
+# Plotando os gráficos com Plotly
+fig = go.Figure()
 
-# Função para carregar dados
-@st.cache_data
-def carregar_dados(ticker, periodo):
-    return yf.download(ticker, period=periodo)
+fig.add_trace(go.Candlestick(
+    x=data.index,
+    open=data['Open'],
+    high=data['High'],
+    low=data['Low'],
+    close=data['Close'],
+    name='Preço'
+))
 
-df = carregar_dados(ativo_selecionado, periodo)
+fig.add_trace(go.Scatter(x=data.index, y=data['SMA50'], mode='lines', name='SMA 50', line=dict(color='orange')))
+fig.add_trace(go.Scatter(x=data.index, y=data['SMA200'], mode='lines', name='SMA 200', line=dict(color='red')))
 
-if not df.empty:
-    preco_atual = df["Close"].iloc[-1]
-    preco_inicial = df["Close"].iloc[0]
-    variacao_total = ((preco_atual - preco_inicial) / preco_inicial) * 100
+# Exibindo o gráfico
+st.plotly_chart(fig)
 
-    col1, col2, col3 = st.columns(3)
+# Adicionando alertas
+if data['SMA50'].iloc[-1] > data['SMA200'].iloc[-1]:
+    st.success('Sinal de Compra: SMA50 cruzou acima da SMA200')
+elif data['SMA50'].iloc[-1] < data['SMA200'].iloc[-1]:
+    st.error('Sinal de Venda: SMA50 cruzou abaixo da SMA200')
 
-    col1.metric("Ativo", ativo_selecionado)
-    col2.metric("Preço Atual", f"R$ {preco_atual:.2f}")
-    col3.metric("Variação no Período", f"{variacao_total:.2f}%", delta_color="inverse")
+# Executar a aplicação
+if __name__ == '__main__':
+    st.write('Aplicação de Análise de Day Trade está rodando!')
 
-    if variacao_total >= 10:
-        st.success("📈 Tendência de alta detectada!")
-    elif variacao_total <= -10:
-        st.error("📉 Tendência de baixa detectada!")
-    else:
-        st.warning("⚠️ Variação lateral ou indefinida.")
-else:
-    st.error("Não foi possível carregar os dados. Verifique o ativo ou o período.")
