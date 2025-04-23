@@ -82,14 +82,7 @@ cripto = {
     "Litecoin (LTC)": "litecoin",
     "Cardano (ADA)": "cardano",
     "Polkadot (DOT)": "polkadot",
-    "Solana (SOL)": "solana",
-    "Avalanche (AVAX)": "avalanche-2",
-    "Chainlink (LINK)": "chainlink",
-    "Shiba Inu (SHIB)": "shiba-inu",
     "Binance Coin (BNB)": "binancecoin",
-    "Polygon (MATIC)": "matic-network",
-    "Uniswap (UNI)": "uniswap",
-    "Terra (LUNA)": "terra-luna"
 }
 
 acoes = {
