@@ -1,129 +1,141 @@
 import streamlit as st
 import pandas as pd
-import requests
 import yfinance as yf
-from plotly import graph_objs as go
+from pycoingecko import CoinGeckoAPI
 
-# Configuração do layout
-st.set_page_config(layout="wide")
-st.title("📊 TradeMaster AI - Painéis Integrados")
+cg = CoinGeckoAPI()
 
-# Cotação USD/BRL
-@st.cache_data(ttl=300)
+# Conversão USD → BRL
 def get_usd_brl():
-    try:
-        cotacao = yf.download("USDBRL=X", period="1d", interval="1m")
-        return cotacao["Close"].iloc[-1]
-    except:
-        return 5.0
+    ticker = yf.Ticker("USDBRL=X")
+    data = ticker.history(period="1d", interval="1m")
+    return data["Close"].iloc[-1]
 
 usd_brl = get_usd_brl()
 
-# Cálculo de métricas
-def calcular_metricas(df):
-    if df.empty:
-        return {}
-    max_price = df["High"].max()
-    min_price = df["Low"].min()
-    vol = max_price - min_price
-    vol_pct = (vol / min_price) * 100 if min_price != 0 else 0
-    buy = min_price + 0.1 * vol
-    sell = max_price - 0.1 * vol
-    return {
-        "Menor Preço do Dia": f"R$ {min_price:.2f}",
-        "Maior Preço do Dia": f"R$ {max_price:.2f}",
-        "Volatilidade": f"R$ {vol:.2f}",
-        "% Volatilidade": f"{vol_pct:.2f}%",
-        "Ideal Compra": f"R$ {buy:.2f}",
-        "Ideal Venda": f"R$ {sell:.2f}",
-    }
-
-# Gráfico de candles
-def plot_candle(df, nome):
-    if df.empty:
-        st.warning(f"Sem dados para {nome}.")
-        return
-    fig = go.Figure(data=[go.Candlestick(
-        x=df.index,
-        open=df['Open'],
-        high=df['High'],
-        low=df['Low'],
-        close=df['Close']
-    )])
-    fig.update_layout(title=f"Gráfico de Candles - {nome}", height=300, xaxis_rangeslider_visible=False)
-    st.plotly_chart(fig, use_container_width=True)
-
-# Dados de Cripto com CoinGecko
-def fetch_crypto(coin_id):
-    try:
-        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc?vs_currency=usd&days=1"
-        r = requests.get(url).json()
-        df = pd.DataFrame(r, columns=["timestamp", "Open", "High", "Low", "Close"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df.set_index("timestamp", inplace=True)
-        df[["Open", "High", "Low", "Close"]] *= usd_brl
-        return df
-    except:
-        return pd.DataFrame()
-
-# Dados com Yahoo Finance (ações e commodities)
-def fetch_yahoo(ticker):
-    try:
-        df = yf.download(ticker, period="1d", interval="5m")
-        df[["Open", "High", "Low", "Close"]] *= usd_brl
-        return df
-    except:
-        return pd.DataFrame()
-
-# ========== PAINEL CRIPTO ==========
-st.header("💰 Criptomoedas")
+# --- LISTAS DE ATIVOS ---
 cripto_ids = {
-    "Bitcoin": "bitcoin", 
-    "Ethereum": "ethereum", 
-    "Solana": "solana"
+    "Bitcoin": "bitcoin",
+    "Ethereum": "ethereum",
+    "Ripple": "ripple",
+    "Dogecoin": "dogecoin",
+    "Litecoin": "litecoin",
+    "Cardano": "cardano",
+    "Polkadot": "polkadot",
+    "Solana": "solana",
+    "Avalanche": "avalanche-2",
+    "Chainlink": "chainlink",
+    "Shiba Inu": "shiba-inu",
+    "Binance Coin": "binancecoin",
+    "Polygon": "matic-network",
+    "Uniswap": "uniswap",
+    "Terra": "terra-luna"
 }
-dados_cripto = []
 
-for nome, cid in cripto_ids.items():
-    df = fetch_crypto(cid)
-    metrics = calcular_metricas(df)
-    metrics["Ativo"] = nome
-    metrics["Fonte"] = "CoinGecko"
-    dados_cripto.append(metrics)
-    plot_candle(df, nome)
+acoes = [
+    "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC",
+    "SPOT", "PLTR", "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN",
+    "HOOD", "MRNA", "SNOW"
+]
 
-st.dataframe(pd.DataFrame(dados_cripto), use_container_width=True)
-
-# ========== PAINEL AÇÕES ==========
-st.header("📈 Ações")
-acoes = ["AAPL", "TSLA", "AMZN"]
-dados_acoes = []
-
-for ticker in acoes:
-    df = fetch_yahoo(ticker)
-    metrics = calcular_metricas(df)
-    metrics["Ativo"] = ticker
-    metrics["Fonte"] = "Yahoo Finance"
-    dados_acoes.append(metrics)
-    plot_candle(df, ticker)
-
-st.dataframe(pd.DataFrame(dados_acoes), use_container_width=True)
-
-# ========== PAINEL COMMODITIES ==========
-st.header("🛢️ Commodities")
 commodities = {
     "Ouro": "GC=F",
     "Petróleo Brent": "BZ=F",
-    "Café": "KC=F"
+    "Petróleo WTI": "CL=F",
+    "Cobre": "HG=F",
+    "Algodão": "CT=F",
+    "Café": "KC=F",
+    "Soja": "ZS=F",
+    "Milho": "ZC=F",
+    "Açúcar": "SB=F",
+    "Paládio": "PA=F"
 }
-dados_commodities = []
 
-for nome, ticker in commodities.items():
-    df = fetch_yahoo(ticker)
-    metrics = calcular_metricas(df)
-    metrics["Ativo"] = nome
-    metrics["Fonte"] = "Yahoo Finance"
-    dados_commodities.append(metrics)
-    plot_candle(df, nome)
+# --- FUNÇÕES ---
+def painel_cripto():
+    dados = []
+    for nome, coin_id in cripto_ids.items():
+        try:
+            data = cg.get_coin_market_chart_by_id(id=coin_id, vs_currency='usd', days=1)
+            preco = data["prices"][-1][1]
+            high = max([x[1] for x in data["prices"]])
+            low = min([x[1] for x in data["prices"]])
+            vol = ((high - low) / low) * 100
+            compra = low * 1.05
+            venda = high * 0.95
+            dados.append({
+                "Cripto": nome,
+                "Menor Preço": f"R$ {low * usd_brl:.2f}",
+                "Maior Preço": f"R$ {high * usd_brl:.2f}",
+                "Preço Atual": f"R$ {preco * usd_brl:.2f}",
+                "Volatilidade (%)": f"{vol:.2f}%",
+                "Compra Ideal": f"R$ {compra * usd_brl:.2f}",
+                "Venda Ideal": f"R$ {venda * usd_brl:.2f}"
+            })
+        except Exception as e:
+            continue
+    return pd.DataFrame(dados)
 
-st.dataframe(pd.DataFrame(dados_commodities), use_container_width=True)
+def painel_acoes():
+    dados = []
+    for ticker in acoes:
+        try:
+            acao = yf.Ticker(ticker)
+            hist = acao.history(period="1d", interval="1m")
+            preco = hist["Close"].iloc[-1]
+            high = hist["High"].max()
+            low = hist["Low"].min()
+            vol = ((high - low) / low) * 100
+            compra = low * 1.05
+            venda = high * 0.95
+            dados.append({
+                "Ação": ticker,
+                "Menor Preço": f"R$ {low * usd_brl:.2f}",
+                "Maior Preço": f"R$ {high * usd_brl:.2f}",
+                "Preço Atual": f"R$ {preco * usd_brl:.2f}",
+                "Volatilidade (%)": f"{vol:.2f}%",
+                "Compra Ideal": f"R$ {compra * usd_brl:.2f}",
+                "Venda Ideal": f"R$ {venda * usd_brl:.2f}"
+            })
+        except Exception as e:
+            continue
+    return pd.DataFrame(dados)
+
+def painel_commodities():
+    dados = []
+    for nome, ticker in commodities.items():
+        try:
+            com = yf.Ticker(ticker)
+            hist = com.history(period="1d", interval="1m")
+            preco = hist["Close"].iloc[-1]
+            high = hist["High"].max()
+            low = hist["Low"].min()
+            vol = ((high - low) / low) * 100
+            compra = low * 1.05
+            venda = high * 0.95
+            dados.append({
+                "Commodity": nome,
+                "Menor Preço": f"R$ {low * usd_brl:.2f}",
+                "Maior Preço": f"R$ {high * usd_brl:.2f}",
+                "Preço Atual": f"R$ {preco * usd_brl:.2f}",
+                "Volatilidade (%)": f"{vol:.2f}%",
+                "Compra Ideal": f"R$ {compra * usd_brl:.2f}",
+                "Venda Ideal": f"R$ {venda * usd_brl:.2f}"
+            })
+        except Exception as e:
+            continue
+    return pd.DataFrame(dados)
+
+# --- INTERFACE ---
+st.set_page_config(layout="wide")
+st.title("📊 TradeMaster.AI - Painel de Ativos em Reais")
+
+st.subheader("🪙 Criptomoedas")
+st.dataframe(painel_cripto(), use_container_width=True)
+
+st.subheader("📈 Ações")
+st.dataframe(painel_acoes(), use_container_width=True)
+
+st.subheader("🛢️ Commodities")
+st.dataframe(painel_commodities(), use_container_width=True)
+
