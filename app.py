@@ -1,70 +1,73 @@
 import streamlit as st
-import pandas as pd
 import yfinance as yf
-import time
-import requests
-from datetime import datetime, timedelta
+import pandas as pd
 import plotly.graph_objects as go
+import datetime
+import pytz
+import requests
+
+# Configurações do Telegram (substitua com suas informações reais)
+TELEGRAM_TOKEN = "6991361961:AAF0u9nbRLTCtqN-2iX7bl9d_4Hp7WcFZLQ"
+TELEGRAM_CHAT_ID = "5454067892"
 
 st.set_page_config(layout="wide")
 
-# Telegram config (substitua pelos seus dados)
-BOT_TOKEN = "SEU_BOT_TOKEN"
-CHAT_ID = "SEU_CHAT_ID"
-
-@st.cache_data(ttl=180)
-def fetch_stock_data(tickers):
-    data = {}
-    for ticker in tickers:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1d", interval="1m")
-        if hist.empty:
-            continue
-        price = hist["Close"].iloc[-1]
-        low = hist["Low"].min()
-        high = hist["High"].max()
-        variation = ((price - hist["Open"].iloc[0]) / hist["Open"].iloc[0]) * 100
-
-        # Alerta Telegram
-        if price <= low:
-            msg = f"🔔 {ticker} atingiu o menor preço do dia: R${price:.2f}"
-            send_telegram_message(msg)
-
-        data[ticker] = {
-            "Ticker": ticker,
-            "Menor Preço do Dia": f"R${low:.2f}",
-            "Maior Preço do Dia": f"R${high:.2f}",
-            "Preço": f"R${price:.2f}",
-            "Variação": f"{variation:.2f}%",
-            "Compra Sugerida": f"R${(price * 0.98):.2f}",
-            "Venda Sugerida": f"R${(price * 1.02):.2f}",
-            "Histórico": hist
-        }
-    return data
-
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message}
+# Função para enviar alerta via Telegram
+def send_telegram_alert(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     try:
-        requests.post(url, json=payload)
+        requests.post(url, data=payload)
     except Exception as e:
-        st.error(f"Erro ao enviar alerta para o Telegram: {e}")
+        st.warning(f"Erro ao enviar mensagem no Telegram: {e}")
 
-def display_table(df):
-    st.dataframe(df.sort_values("Ticker"), use_container_width=True)
+# Função para buscar dados de ações
+def fetch_stock_data(tickers):
+    stock_data = {}
+    for ticker in tickers:
+        try:
+            hist = yf.download(ticker, period="1d", interval="5m")
+            if hist.empty:
+                continue
+            price = hist["Close"].iloc[-1]
+            min_price = hist["Low"].min()
+            max_price = hist["High"].max()
+            open_price = hist["Open"].iloc[0]
+            variation = ((price - open_price) / open_price) * 100
+            buy_price = price * 0.98
+            sell_price = price * 1.02
 
+            # Alerta se o preço atual for igual ao menor do dia
+            if price == min_price:
+                send_telegram_alert(f"🚨 Alerta: {ticker} atingiu o menor preço do dia! Preço atual: R$ {price:.2f}")
+
+            stock_data[ticker] = {
+                "Ticker": ticker,
+                "Preço": price,
+                "Menor Preço do Dia": min_price,
+                "Maior Preço do Dia": max_price,
+                "Variação": f"{variation:.2f}%",
+                "Compra Sugerida": buy_price,
+                "Venda Sugerida": sell_price,
+                "Histórico": hist,
+            }
+        except Exception as e:
+            print(f"Erro ao baixar dados de {ticker}: {e}")
+    return stock_data
+
+# Função para exibir o gráfico
 def display_chart(hist, ticker):
-    st.subheader(f"Gráfico de Candlestick - {ticker}")
-    fig = go.Figure(data=[go.Candlestick(
-        x=hist.index,
-        open=hist["Open"],
-        high=hist["High"],
-        low=hist["Low"],
-        close=hist["Close"]
-    )])
-    fig.update_layout(height=500, xaxis_rangeslider_visible=False)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=hist.index, y=hist["Close"], mode="lines", name="Preço"))
+    fig.update_layout(title=f"Histórico intradiário de {ticker}", xaxis_title="Horário", yaxis_title="Preço (R$)")
     st.plotly_chart(fig, use_container_width=True)
 
+# Função para exibir tabela com destaques
+def display_table(df):
+    styled_df = df.style.applymap(lambda v: "color: green;" if isinstance(v, str) and "-" not in v and "%" in v else ("color: red;" if isinstance(v, str) and "-" in v else ""), subset=["Variação"])
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+# Função principal
 def main():
     st.title("📈 Painel de Ações - TradeMaster AI")
 
@@ -76,6 +79,10 @@ def main():
     ]
 
     stock_data = fetch_stock_data(tickers)
+
+    if not stock_data:
+        st.error("❌ Nenhum dado foi carregado. Verifique a conexão ou se o mercado está fechado.")
+        return
 
     df = pd.DataFrame([
         {
@@ -90,7 +97,11 @@ def main():
         for info in stock_data.values()
     ])
 
-    selected_ticker = st.selectbox("🔍 Selecione um ativo para visualizar o gráfico", df["Ticker"])
+    if df.empty or "Ticker" not in df.columns:
+        st.error("❌ A tabela de dados está vazia ou malformada.")
+        return
+
+    selected_ticker = st.selectbox("🔍 Selecione um ativo para visualizar o gráfico", df["Ticker"].tolist())
     if selected_ticker:
         display_chart(stock_data[selected_ticker]["Histórico"], selected_ticker)
 
