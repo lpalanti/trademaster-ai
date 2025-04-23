@@ -2,70 +2,125 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-import telegram
+import requests
 from datetime import datetime, timedelta
 import pytz
 
-# Função para enviar alerta no Telegram
+# Configuração do Streamlit
+st.set_page_config(layout="wide")
+
+# Configurações do Telegram (substitua pelos seus dados)
+BOT_TOKEN = '7971840892:AAH8sIg3iQUI7jQkMSd3YrYPaU4giRDVRQc'
+CHAT_ID = '1963421158'
+
+# Lista de ativos
+TICKERS = ['WEGE3.SA', 'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA']
+
+# Fuso horário
+TZ = pytz.timezone('America/Sao_Paulo')
+
+# Função para enviar alerta via Telegram
+
 def send_telegram_alert(message):
-    bot = telegram.Bot(token='7971840892:AAH8sIg3iQUI7jQkMSd3YrYPaU4giRDVRQc')
-    chat_id = '1963421158'
-    bot.sendMessage(chat_id=chat_id, text=message)
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {'chat_id': CHAT_ID, 'text': message}
+    try:
+        requests.post(url, data=payload)
+    except Exception as e:
+        st.warning(f"Erro ao enviar alerta para o Telegram: {e}")
 
-# Função para obter dados de ações
-def get_stock_data(ticker, start_date, end_date):
-    df = yf.download(ticker, start=start_date, end=end_date, interval='1m')
-    return df
+# Função para obter dados de ações do dia
+@st.cache_data(ttl=180)
+def fetch_stock_data(tickers):
+    data = {}
+    now = datetime.now(TZ)
+    start = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+    end = now.strftime('%Y-%m-%d')
+    for ticker in tickers:
+        try:
+            df = yf.download(ticker, start=start, end=end, interval='1m', progress=False)
+            if df.empty:
+                continue
+            price = float(df['Close'].iloc[-1])
+            low = float(df['Low'].min())
+            high = float(df['High'].max())
+            open_price = float(df['Open'].iloc[0])
+            variation = ((price - open_price) / open_price) * 100
+            buy_price = price * 0.98
+            sell_price = price * 1.02
 
-# Função para construir o gráfico
-def plot_stock_chart(df, ticker):
-    fig = go.Figure(data=[go.Candlestick(x=df.index,
-                                        open=df['Open'],
-                                        high=df['High'],
-                                        low=df['Low'],
-                                        close=df['Close'],
-                                        name=ticker)])
-    fig.update_layout(title=f'Gráfico de {ticker}',
-                      xaxis_title='Data',
-                      yaxis_title='Preço',
-                      template='plotly_dark')
-    return fig
+            # Alerta Telegram se atingir menor preço do dia
+            if price == low:
+                send_telegram_alert(f"🚨 {ticker} atingiu o menor preço do dia: R$ {price:.2f}")
 
-# Função para verificar o menor valor do dia
-def check_lowest_price_alert(df, ticker):
-    min_price = df['Low'].min()
-    min_price_time = df['Low'].idxmin()
-    return min_price, min_price_time
+            data[ticker] = {
+                'Ticker': ticker,
+                'Menor Preço do Dia': round(low, 2),
+                'Maior Preço do Dia': round(high, 2),
+                'Preço': round(price, 2),
+                'Variação (%)': f"{variation:.2f}%",
+                'Compra Sugerida': round(buy_price, 2),
+                'Venda Sugerida': round(sell_price, 2),
+                'Histórico': df
+            }
+        except Exception as e:
+            st.warning(f"Erro ao baixar dados de {ticker}: {e}")
+    return data
 
-# Função principal do app
+# Função para exibir tabela
+
+def display_table(df):
+    st.dataframe(df, use_container_width=True)
+
+# Função para exibir gráfico de candlestick
+
+def display_chart(df, ticker):
+    if df.empty:
+        st.warning("Sem dados históricos para exibir.")
+        return
+    fig = go.Figure(data=[go.Candlestick(
+        x=df.index,
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close']
+    )])
+    fig.update_layout(
+        title=f"Candlestick de {ticker}",
+        xaxis_title="Data",
+        yaxis_title="Preço (R$)",
+        xaxis_rangeslider_visible=False
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# Função principal
+
 def main():
-    # Fuso horário de São Paulo
-    tz = pytz.timezone('America/Sao_Paulo')
-    now = datetime.now(tz)
+    st.title("📈 Painel de Ações - TradeMaster AI")
+    data = fetch_stock_data(TICKERS)
+    if not data:
+        st.error("Nenhum dado disponível.")
+        return
+    df = pd.DataFrame([{k: v for k, v in {
+        'Ticker': info['Ticker'],
+        'Menor Preço do Dia': info['Menor Preço do Dia'],
+        'Maior Preço do Dia': info['Maior Preço do Dia'],
+        'Preço': info['Preço'],
+        'Variação (%)': info['Variação (%)'],
+        'Compra Sugerida': info['Compra Sugerida'],
+        'Venda Sugerida': info['Venda Sugerida']
+    }.items()} for info in data.values()]).set_index('Ticker')
 
-    # Período de dados: de 1 dia atrás até o momento atual
-    start_date = (now - timedelta(days=1)).strftime('%Y-%m-%d')
-    end_date = now.strftime('%Y-%m-%d')
+    # Ordenação interativa
+    sort_by = st.selectbox("Ordenar por", df.columns.tolist(), index=2)
+    df = df.sort_values(by=sort_by, ascending=False)
+    display_table(df)
 
-    # Lista de tickers
-    tickers = ['WEGE3.SA', 'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA']
+    # Seleção para gráfico
+    st.markdown("---")
+    ticker = st.selectbox("Selecione ativo para gráfico", df.index.tolist())
+    display_chart(data[ticker]['Histórico'], ticker)
 
-    # Seleção do ativo
-    selected_ticker = st.selectbox("🔍 Selecione um ativo para visualizar o gráfico", tickers)
-
-    # Obter dados históricos
-    df = get_stock_data(selected_ticker, start_date, end_date)
-
-    # Plotar gráfico
-    st.plotly_chart(plot_stock_chart(df, selected_ticker))
-
-    # Verificar e exibir o menor preço do dia
-    min_price, min_price_time = check_lowest_price_alert(df, selected_ticker)
-    st.write(f'O menor preço de {selected_ticker} hoje foi {min_price} às {min_price_time.strftime("%H:%M:%S")}.')
-
-    # Enviar alerta no Telegram
-    send_telegram_alert(f'Alerta de preço baixo: {selected_ticker} atingiu o menor preço de {min_price} às {min_price_time.strftime("%H:%M:%S")}.')
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
