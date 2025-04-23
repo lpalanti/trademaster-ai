@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objs as go
-from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 st.title("📈 Painel de Ações - TradeMaster AI")
@@ -29,10 +28,10 @@ def get_stock_data():
         try:
             df = yf.download(ticker, period="1d", interval="1m", progress=False)
             if not df.empty:
-                open_price = df['Open'].iloc[0]
-                close_price = df['Close'].iloc[-1]
-                high_price = df['High'].max()
-                low_price = df['Low'].min()
+                open_price = float(df['Open'].iloc[0])
+                close_price = float(df['Close'].iloc[-1])
+                high_price = float(df['High'].max())
+                low_price = float(df['Low'].min())
                 change = ((close_price - open_price) / open_price) * 100
 
                 data.append({
