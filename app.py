@@ -2,144 +2,126 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 from pycoingecko import CoinGeckoAPI
+import requests
 
-cg = CoinGeckoAPI()
+# Telegram config
+TELEGRAM_TOKEN = '7971840892:AAH8sIg3iQUI7jQkMSd3YrYPaU4giRDVRQc'
+CHAT_ID = '1963421158'
 
-st.set_page_config(layout="wide")
-st.title("📊 TradeMaster AI - Painéis de Acompanhamento")
+def send_telegram_alert(message):
+    url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage'
+    data = {'chat_id': CHAT_ID, 'text': message}
+    requests.post(url, data=data)
 
-# Função para carregar dados de criptomoedas via CoinGecko
-def carregar_dados_cripto(ativos):
-    tabela = []
+# Painel Cripto
+def painel_cripto():
+    st.subheader("Painel Criptomoedas")
+    cg = CoinGeckoAPI()
+    coins = ["bitcoin", "ethereum", "ripple", "cardano", "litecoin", 
+             "solana", "polkadot", "chainlink", "avalanche-2", "uniswap"]
+    cripto_data = []
 
-    try:
-        usd_brl = cg.get_price(ids="usd", vs_currencies="brl")["usd"]["brl"]
-    except:
-        st.error("Erro ao obter taxa USD/BRL.")
-        return pd.DataFrame()
-
-    for nome, coin_id in ativos.items():
+    for coin in coins:
         try:
-            info = cg.get_coin_by_id(coin_id, localization=False)
-            preco = info["market_data"]["current_price"]["brl"]
-            maximo = info["market_data"]["high_24h"]["brl"]
-            minimo = info["market_data"]["low_24h"]["brl"]
-            vol = info["market_data"]["price_change_percentage_24h"]
+            data = cg.get_price(ids=coin, vs_currencies='brl', include_24hr_change=True)
+            price = data[coin]['brl']
+            change = data[coin]['brl_24h_change']
+            preco_compra = price * 0.95
+            preco_venda = price * 1.05
 
-            preco_compra = preco * 0.95
-            preco_venda = preco * 1.05
+            if price <= preco_compra:
+                send_telegram_alert(f"🚨 Cripto em oportunidade!\n{coin.upper()} abaixo do ideal de compra.\n💰 Atual: R$ {price:.2f}\n🎯 Alvo: R$ {preco_compra:.2f}")
 
-            tabela.append({
-                "Nome": nome,
-                "Preço (R$)": f"R$ {preco:.2f}",
-                "Máximo 24h": f"R$ {maximo:.2f}",
-                "Mínimo 24h": f"R$ {minimo:.2f}",
-                "Variação 24h (%)": f"{vol:.2f}%",
-                "Sugestão de Compra": f"R$ {preco_compra:.2f}",
-                "Sugestão de Venda": f"R$ {preco_venda:.2f}",
+            cripto_data.append({
+                "Cripto": coin.upper(),
+                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Variação 24h (%)": f"{change:.2f}%",
+                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
+                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
             })
-        except:
-            continue
+        except Exception as e:
+            st.warning(f"Erro ao buscar {coin}: {e}")
 
-    return pd.DataFrame(tabela)
+    df = pd.DataFrame(cripto_data)
+    st.table(df)
 
-# Função para carregar dados de ações e commodities via Yahoo Finance
-def carregar_dados_yahoo(ativos):
-    tabela = []
+# Painel Ações
+def painel_acoes():
+    st.subheader("Painel Ações")
+    stock_list = [
+        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "WEGE3.SA",
+        "ABEV3.SA", "BBAS3.SA", "MGLU3.SA", "RENT3.SA", "RAIL3.SA"
+    ]
+    stock_data = []
 
-    for nome, ticker in ativos.items():
+    for ticker in stock_list:
         try:
-            dado = yf.Ticker(ticker)
-            hist = dado.history(period="1d", interval="1m")
-            preco_atual = hist["Close"][-1]
-            minimo = hist["Low"].min()
-            maximo = hist["High"].max()
-            vol = (maximo - minimo) / preco_atual * 100 if preco_atual != 0 else 0
+            stock = yf.Ticker(ticker)
+            df = stock.history(period="1d", interval="1m")
 
-            preco_compra = preco_atual * 0.95
-            preco_venda = preco_atual * 1.05
+            if df.empty:
+                continue
 
-            tabela.append({
-                "Nome": nome,
-                "Preço (R$)": f"R$ {preco_atual:.2f}",
-                "Máximo 24h": f"R$ {maximo:.2f}",
-                "Mínimo 24h": f"R$ {minimo:.2f}",
-                "Variação (%)": f"{vol:.2f}%",
-                "Sugestão de Compra": f"R$ {preco_compra:.2f}",
-                "Sugestão de Venda": f"R$ {preco_venda:.2f}",
+            price = df['Close'][-1]
+            preco_compra = price * 0.95
+            preco_venda = price * 1.05
+
+            if price <= preco_compra:
+                send_telegram_alert(f"📉 Ação em oportunidade!\n{ticker} abaixo do ideal de compra.\n💰 Atual: R$ {price:.2f}\n🎯 Alvo: R$ {preco_compra:.2f}")
+
+            stock_data.append({
+                "Ação": ticker,
+                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
+                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
             })
-        except:
-            continue
+        except Exception as e:
+            st.warning(f"Erro em {ticker}: {e}")
 
-    return pd.DataFrame(tabela)
+    df = pd.DataFrame(stock_data)
+    st.table(df)
 
-# Dicionários de ativos
-cripto = {
-    "Bitcoin (BTC)": "bitcoin",
-    "Ethereum (ETH)": "ethereum",
-    "Ripple (XRP)": "ripple",
-    "Dogecoin (DOGE)": "dogecoin",
-    "Litecoin (LTC)": "litecoin",
-    "Cardano (ADA)": "cardano",
-    "Polkadot (DOT)": "polkadot",
-    "Binance Coin (BNB)": "binancecoin",
-}
+# Painel Commodities
+def painel_commodities():
+    st.subheader("Painel Commodities")
+    commodities = ["GC=F", "SI=F", "CL=F", "BZ=F", "NG=F"]
+    commodities_data = []
 
-acoes = {
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Apple": "AAPL",
-    "Meta": "META",
-    "Netflix": "NFLX",
-    "Nvidia": "NVDA",
-    "GameStop": "GME",
-    "AMC Entertainment": "AMC",
-    "Spotify": "SPOT",
-    "Palantir": "PLTR",
-    "Roku": "ROKU",
-    "Square": "SQ",
-    "Zoom Video": "ZM",
-    "DocuSign": "DOCU",
-    "Beyond Meat": "BYND",
-    "Coinbase": "COIN",
-    "Robinhood": "HOOD",
-    "Moderna": "MRNA",
-    "Snowflake": "SNOW"
-}
+    for commodity in commodities:
+        try:
+            com = yf.Ticker(commodity)
+            df = com.history(period="1d", interval="1m")
 
-commodities = {
-    "Ouro": "GC=F",
-    "Petróleo Brent": "BZ=F",
-    "Petróleo WTI": "CL=F",
-    "Cobre": "HG=F",
-    "Algodão": "CT=F",
-    "Café": "KC=F",
-    "Soja": "ZS=F",
-    "Milho": "ZC=F",
-    "Açúcar": "SB=F",
-    "Paládio": "PA=F"
-}
+            if df.empty:
+                continue
 
-# Interface
-st.subheader("🔍 Selecione a categoria que deseja visualizar:")
+            price = df['Close'][-1]
+            preco_compra = price * 0.95
+            preco_venda = price * 1.05
 
-col1, col2, col3 = st.columns(3)
-mostrar_cripto = col1.button("💰 Criptomoedas")
-mostrar_acoes = col2.button("📈 Ações")
-mostrar_commodities = col3.button("🌾 Commodities")
+            if price <= preco_compra:
+                send_telegram_alert(f"🛢️ Commodity em oportunidade!\n{commodity} abaixo do ideal de compra.\n💰 Atual: R$ {price:.2f}\n🎯 Alvo: R$ {preco_compra:.2f}")
 
-if mostrar_cripto:
-    st.subheader("💰 Painel de Criptomoedas")
-    df_cripto = carregar_dados_cripto(cripto)
-    st.dataframe(df_cripto, use_container_width=True)
+            commodities_data.append({
+                "Commodity": commodity,
+                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
+                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
+            })
+        except Exception as e:
+            st.warning(f"Erro em {commodity}: {e}")
 
-if mostrar_acoes:
-    st.subheader("📈 Painel de Ações")
-    df_acoes = carregar_dados_yahoo(acoes)
-    st.dataframe(df_acoes, use_container_width=True)
+    df = pd.DataFrame(commodities_data)
+    st.table(df)
 
-if mostrar_commodities:
-    st.subheader("🌾 Painel de Commodities")
-    df_commodities = carregar_dados_yahoo(commodities)
-    st.dataframe(df_commodities, use_container_width=True)
+# App
+st.title("📊 Painel de Análise de Ativos")
 
+aba = st.radio("Selecione o tipo de ativo:", ["Criptomoedas", "Ações", "Commodities"])
+
+if aba == "Criptomoedas":
+    painel_cripto()
+elif aba == "Ações":
+    painel_acoes()
+elif aba == "Commodities":
+    painel_commodities()
