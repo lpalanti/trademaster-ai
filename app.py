@@ -1,95 +1,90 @@
+# app.py
+
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import time
 import plotly.graph_objs as go
+from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
+st.title("📈 Painel de Ações - TradeMaster AI")
 
-st.title("Painel de Ações")
+TICKERS = [
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA",
+    "WEGE3.SA", "MGLU3.SA", "B3SA3.SA", "BBAS3.SA", "GGBR4.SA",
+    "RENT3.SA", "LREN3.SA", "JBSS3.SA", "ELET3.SA", "CSNA3.SA",
+    "HAPV3.SA", "PRIO3.SA", "SUZB3.SA", "RADL3.SA", "ASAI3.SA"
+]
 
-# Tickers a serem monitorados
-tickers = {
-    "PETR4.SA": "Petrobras",
-    "VALE3.SA": "Vale",
-    "ITUB4.SA": "Itaú Unibanco",
-    "BBDC4.SA": "Bradesco",
-    "BBAS3.SA": "Banco do Brasil",
-    "ABEV3.SA": "Ambev",
-    "WEGE3.SA": "Weg",
-    "MGLU3.SA": "Magazine Luiza",
-    "RENT3.SA": "Localiza",
-    "LREN3.SA": "Lojas Renner",
-    "JBSS3.SA": "JBS",
-    "B3SA3.SA": "B3",
-    "CSNA3.SA": "CSN",
-    "GGBR4.SA": "Gerdau",
-    "EGIE3.SA": "Engie Brasil"
+PERIOD_OPTIONS = {
+    "1 Dia": "1d", "5 Dias": "5d", "1 Mês": "1mo", "3 Meses": "3mo",
+    "6 Meses": "6mo", "1 Ano": "1y", "2 Anos": "2y", "5 Anos": "5y", 
+    "Ano até agora": "ytd", "Máximo": "max"
 }
 
-# Função para buscar dados
 @st.cache_data(ttl=180)
-def fetch_stock_data(tickers):
-    data = {}
-    for ticker in tickers:
+def get_stock_data():
+    data = []
+    for ticker in TICKERS:
         try:
-            info = yf.download(ticker, period="1d", interval="1m")
-            if info.empty:
-                continue
-            preco_atual = info["Close"].iloc[-1]
-            preco_abertura = info["Open"].iloc[0]
-            variacao = ((preco_atual - preco_abertura) / preco_abertura) * 100
-            menor_preco = info["Low"].min()
-            maior_preco = info["High"].max()
-            preco_compra = preco_atual * 0.95
-            preco_venda = preco_atual * 1.05
-            data[ticker] = {
-                "Ativo": tickers[ticker],
-                "Sigla": ticker,
-                "Preço": round(preco_atual, 2),
-                "Variação (%)": round(variacao, 2),
-                "Menor Preço": round(menor_preco, 2),
-                "Maior Preço": round(maior_preco, 2),
-                "Preço Compra (sug.)": round(preco_compra, 2),
-                "Preço Venda (sug.)": round(preco_venda, 2),
-            }
-        except:
-            continue
-    return data
+            df = yf.download(ticker, period="1d", interval="1m", progress=False)
+            if not df.empty:
+                open_price = df['Open'].iloc[0]
+                close_price = df['Close'].iloc[-1]
+                high_price = df['High'].max()
+                low_price = df['Low'].min()
+                change = ((close_price - open_price) / open_price) * 100
 
-# Exibir os dados
-def display_stock_data():
-    df = pd.DataFrame(fetch_stock_data(tickers)).T
-    df = df.sort_values(by="Ativo")
+                data.append({
+                    "Ticker": ticker,
+                    "Preço": round(close_price, 2),
+                    "Abertura": round(open_price, 2),
+                    "Máxima": round(high_price, 2),
+                    "Mínima": round(low_price, 2),
+                    "Variação (%)": round(change, 2),
+                })
+        except Exception as e:
+            st.warning(f"Erro ao buscar dados para {ticker}: {e}")
+    return pd.DataFrame(data)
+
+def plot_candlestick(ticker, period):
+    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    if df.empty:
+        st.error("Sem dados disponíveis para este período.")
+        return
+    fig = go.Figure(data=[go.Candlestick(
+        x=df.index,
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        name=ticker
+    )])
+    fig.update_layout(title=f"Gráfico de Candlestick - {ticker}", xaxis_title="Data", yaxis_title="Preço")
+    st.plotly_chart(fig, use_container_width=True)
+
+def main():
+    st.subheader("Painel de Ações em Tempo Real")
+    df = get_stock_data()
+
+    if df.empty:
+        st.error("Nenhum dado encontrado.")
+        return
+
+    sort_by = st.selectbox("Ordenar por", df.columns, index=0)
+    df = df.sort_values(by=sort_by, ascending=False)
+
     st.dataframe(df, use_container_width=True)
-    return df
 
-# Gráfico
-def show_candle_chart(ticker, periodo):
-    try:
-        data = yf.download(ticker, period=periodo, interval="15m")
-        if data.empty:
-            st.warning("Sem dados para o período selecionado.")
-            return
+    st.markdown("---")
+    st.subheader("📊 Visualizar Gráfico")
 
-        fig = go.Figure(data=[go.Candlestick(x=data.index,
-                        open=data['Open'],
-                        high=data['High'],
-                        low=data['Low'],
-                        close=data['Close'])])
+    selected_ticker = st.selectbox("Escolha o ativo para visualizar o gráfico", df["Ticker"].tolist())
+    selected_period = st.selectbox("Período", list(PERIOD_OPTIONS.keys()), index=1)
+    period_code = PERIOD_OPTIONS[selected_period]
 
-        fig.update_layout(title=f"Gráfico de Candlestick: {ticker}", xaxis_title="Data", yaxis_title="Preço")
-        st.plotly_chart(fig, use_container_width=True)
-    except:
-        st.error("Erro ao carregar gráfico.")
+    plot_candlestick(selected_ticker, period_code)
 
-# Interface
-df = display_stock_data()
+if __name__ == "__main__":
+    main()
 
-st.markdown("## Gráfico do Ativo")
-
-ticker_selecionado = st.selectbox("Selecione o ativo para ver o gráfico:", df["Sigla"])
-periodo = st.selectbox("Selecione o período:", ["1h", "3h", "6h", "12h", "1d", "5d", "15d", "1mo", "1y", "5y"])
-
-if ticker_selecionado:
-    show_candle_chart(ticker_selecionado, periodo)
