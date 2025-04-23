@@ -23,9 +23,11 @@ def painel_cripto():
 
     for coin in coins:
         try:
-            data = cg.get_price(ids=coin, vs_currencies='brl', include_24hr_change=True)
-            price = data[coin]['brl']
-            change = data[coin]['brl_24h_change']
+            market_data = cg.get_coin_by_id(coin)['market_data']
+            price = market_data['current_price']['brl']
+            high = market_data['high_24h']['brl']
+            low = market_data['low_24h']['brl']
+            change = market_data['price_change_percentage_24h']
             preco_compra = price * 0.95
             preco_venda = price * 1.05
 
@@ -34,7 +36,9 @@ def painel_cripto():
 
             cripto_data.append({
                 "Cripto": coin.upper(),
-                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Preço Atual (R$)": f"R$ {price:.2f}",
+                "Mínimo 24h (R$)": f"R$ {low:.2f}",
+                "Máximo 24h (R$)": f"R$ {high:.2f}",
                 "Variação 24h (%)": f"{change:.2f}%",
                 "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
                 "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
@@ -63,6 +67,9 @@ def painel_acoes():
                 continue
 
             price = df['Close'][-1]
+            low = df['Low'].min()
+            high = df['High'].max()
+            change = ((df['Close'][-1] - df['Open'][0]) / df['Open'][0]) * 100
             preco_compra = price * 0.95
             preco_venda = price * 1.05
 
@@ -71,7 +78,10 @@ def painel_acoes():
 
             stock_data.append({
                 "Ação": ticker,
-                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Preço Atual (R$)": f"R$ {price:.2f}",
+                "Mínimo do Dia (R$)": f"R$ {low:.2f}",
+                "Máximo do Dia (R$)": f"R$ {high:.2f}",
+                "Variação (%)": f"{change:.2f}%",
                 "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
                 "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
             })
@@ -96,6 +106,9 @@ def painel_commodities():
                 continue
 
             price = df['Close'][-1]
+            low = df['Low'].min()
+            high = df['High'].max()
+            change = ((df['Close'][-1] - df['Open'][0]) / df['Open'][0]) * 100
             preco_compra = price * 0.95
             preco_venda = price * 1.05
 
@@ -104,7 +117,10 @@ def painel_commodities():
 
             commodities_data.append({
                 "Commodity": commodity,
-                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Preço Atual (R$)": f"R$ {price:.2f}",
+                "Mínimo do Dia (R$)": f"R$ {low:.2f}",
+                "Máximo do Dia (R$)": f"R$ {high:.2f}",
+                "Variação (%)": f"{change:.2f}%",
                 "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
                 "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
             })
