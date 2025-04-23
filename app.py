@@ -2,24 +2,29 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
-import requests
-import time
 
 # Função para obter os dados da ação
 def fetch_stock_data(tickers):
     data = {}
     for ticker in tickers:
-        stock = yf.Ticker(ticker)
-        info = stock.history(period="1d")
-        data[ticker] = {
-            "Nome": ticker,
-            "Preço": info["Close"].iloc[-1],
-            "Variação": info["Close"].pct_change().iloc[-1] * 100,
-            "Menor preço do dia": info["Low"].iloc[-1],
-            "Maior preço do dia": info["High"].iloc[-1],
-            "Preço de compra sugerido": info["Close"].iloc[-1] * 0.95,  # 5% de desconto
-            "Preço de venda sugerido": info["Close"].iloc[-1] * 1.05,  # 5% de acréscimo
-        }
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.history(period="1d")
+            if not info.empty:
+                data[ticker] = {
+                    "Nome": ticker,
+                    "Preço": info["Close"].iloc[-1],
+                    "Variação": info["Close"].pct_change().iloc[-1] * 100,
+                    "Menor preço do dia": info["Low"].iloc[-1],
+                    "Maior preço do dia": info["High"].iloc[-1],
+                    "Preço de compra sugerido": info["Close"].iloc[-1] * 0.95,  # 5% de desconto
+                    "Preço de venda sugerido": info["Close"].iloc[-1] * 1.05,  # 5% de acréscimo
+                }
+            else:
+                data[ticker] = {"Nome": ticker, "Erro": "Sem dados disponíveis"}
+        except Exception as e:
+            data[ticker] = {"Nome": ticker, "Erro": f"Erro ao obter dados: {str(e)}"}
+
     return data
 
 # Função para obter o gráfico de candle
@@ -86,3 +91,4 @@ def main():
 # Executar a aplicação
 if __name__ == "__main__":
     main()
+
