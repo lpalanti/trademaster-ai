@@ -60,8 +60,17 @@ else:
     TOKEN = "SUA_CHAVE_DO_BOT"
     CHAT_ID = "SEU_CHAT_ID"
 
-    variacao_total = ((df["Close"].iloc[-1] / df["Close"].iloc[0]) - 1) * 100
     alerta = None
+    # Verifica se há dados suficientes
+    if len(df) >= 2 and df["Close"].notna().all():
+    preco_inicio = df["Close"].iloc[0]
+    preco_fim = df["Close"].iloc[-1]
+    variacao_total = ((preco_fim / preco_inicio) - 1) * 100
+
+    if variacao_total >= 10:
+        alerta = f"🚨 {ativo} subiu {variacao_total:.2f}% nos últimos {dias} dias!"
+    elif variacao_total <= -10:
+        alerta = f"⚠️ {ativo} caiu {variacao_total:.2f}% nos últimos {dias} dias!"
 
     if variacao_total >= 10:
         alerta = f"🚨 {ativo} subiu {variacao_total:.2f}% nos últimos {dias} dias!"
