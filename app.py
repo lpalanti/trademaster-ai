@@ -1,150 +1,157 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+from pycoingecko import CoinGeckoAPI
 import requests
-from datetime import datetime
-import pytz
 
-# Função para converter USD para BRL
-def get_usd_brl():
-    url = "https://api.exchangerate.host/latest?base=USD&symbols=BRL"
-    response = requests.get(url)
-    data = response.json()
-    return data["rates"]["BRL"]
+# Configurações do Telegram
+TELEGRAM_TOKEN = '7971840892:AAH8sIg3iQUI7jQkMSd3YrYPaU4giRDVRQc'
+CHAT_ID = '1963421158'
 
-# Função para calcular preços sugeridos
-def calc_sugestoes(preco):
-    preco_compra = preco * 0.95
-    preco_venda = preco * 1.05
-    return preco_compra, preco_venda
+def send_telegram_alert(message):
+    url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage'
+    data = {'chat_id': CHAT_ID, 'text': message}
+    requests.post(url, data=data)
 
-# Criptomoedas (usando CoinGecko)
-crypto_ids = {
-    "Bitcoin": "bitcoin",
-    "Ethereum": "ethereum",
-    "Ripple": "ripple",
-    "Dogecoin": "dogecoin",
-    "Litecoin": "litecoin",
-    "Cardano": "cardano",
-    "Polkadot": "polkadot",
-    "Solana": "solana",
-    "Avalanche": "avalanche-2",
-    "Chainlink": "chainlink",
-    "Shiba Inu": "shiba-inu",
-    "Binance Coin": "binancecoin",
-    "Polygon": "matic-network",
-    "Uniswap": "uniswap",
-    "Terra": "terra-luna"
-}
+# Função painel Cripto
+def painel_cripto():
+    st.subheader("Painel Criptomoedas")
+    cg = CoinGeckoAPI()
+    coins = [
+        "bitcoin", "ethereum", "ripple", "dogecoin", "litecoin",
+        "cardano", "polkadot", "solana", "avalanche", "chainlink",
+        "shiba-inu", "binancecoin", "polygon", "uniswap", "terra-luna"
+    ]
+    cripto_data = []
 
-# Ações
-stock_tickers = {
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Apple": "AAPL",
-    "Meta": "META",
-    "Netflix": "NFLX",
-    "Nvidia": "NVDA",
-    "GameStop": "GME",
-    "AMC Entertainment": "AMC",
-    "Spotify": "SPOT",
-    "Palantir": "PLTR",
-    "Roku": "ROKU",
-    "Square": "SQ",
-    "Zoom Video": "ZM",
-    "DocuSign": "DOCU",
-    "Beyond Meat": "BYND",
-    "Coinbase": "COIN",
-    "Robinhood": "HOOD",
-    "Moderna": "MRNA",
-    "Snowflake": "SNOW"
-}
-
-# Commodities (yfinance)
-commodity_tickers = {
-    "Ouro": "XAUUSD=X",
-    "Petróleo Brent": "BZ=F",
-    "Petróleo WTI": "CL=F",
-    "Cobre": "HG=F",
-    "Algodão": "CT=F",
-    "Café": "KC=F",
-    "Soja": "ZS=F",
-    "Milho": "ZC=F",
-    "Açúcar": "SB=F",
-    "Paládio": "PA=F"
-}
-
-usd_brl = get_usd_brl()
-
-# Função dados CoinGecko
-def fetch_crypto_data():
-    df = []
-    for name, coin_id in crypto_ids.items():
+    for coin in coins:
         try:
-            r = requests.get(f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false")
-            r = r.json()
-            preco_usd = r["market_data"]["current_price"]["usd"]
-            preco_brl = preco_usd * usd_brl
-            preco_min = r["market_data"]["low_24h"]["usd"] * usd_brl
-            preco_max = r["market_data"]["high_24h"]["usd"] * usd_brl
-            variacao = r["market_data"]["price_change_percentage_24h"]
-            preco_compra, preco_venda = calc_sugestoes(preco_brl)
-            df.append({
-                "Nome": name,
-                "Sigla": coin_id.upper(),
-                "Preço (R$)": f"R$ {preco_brl:,.2f}",
-                "Menor Preço (R$)": f"R$ {preco_min:,.2f}",
-                "Maior Preço (R$)": f"R$ {preco_max:,.2f}",
-                "Variação (%)": f"{variacao:.2f}%",
-                "Preço Compra Sugerido": f"R$ {preco_compra:,.2f}",
-                "Preço Venda Sugerido": f"R$ {preco_venda:,.2f}"
-            })
-        except:
-            continue
-    return pd.DataFrame(df)
+            data = cg.get_price(ids=coin, vs_currencies='brl', include_24hr_change=True)
+            price = data[coin]['brl']
+            change = data[coin]['brl_24h_change']
+            preco_compra = price * 0.95
+            preco_venda = price * 1.05
 
-# Função dados yFinance
-def fetch_yahoo_data(tickers_dict):
-    df = []
-    for name, ticker in tickers_dict.items():
+            if price <= preco_compra:
+                send_telegram_alert(
+                    f"🚨 Cripto em oportunidade!\n"
+                    f"{coin.upper()} abaixo do ideal de compra.\n"
+                    f"💰 Atual: R$ {price:.2f}\n"
+                    f"🎯 Alvo: R$ {preco_compra:.2f}"
+                )
+
+            cripto_data.append({
+                "Cripto": coin.upper(),
+                "Preço atual (R$)": f"R$ {price:.2f}",
+                "Variação 24h (%)": f"{change:.2f}%",
+                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
+                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
+            })
+        except Exception as e:
+            st.warning(f"Erro ao buscar {coin}: {e}")
+
+    df = pd.DataFrame(cripto_data)
+    st.table(df)
+
+# Função painel Ações
+def painel_acoes():
+    st.subheader("Painel Ações")
+    stock_list = [
+        "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT",
+        "PLTR", "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW"
+    ]
+    stock_data = []
+
+    for ticker in stock_list:
         try:
-            data = yf.Ticker(ticker).history(period="1d", interval="1m")
-            preco = data["Close"].iloc[-1] * usd_brl
-            menor = data["Low"].min() * usd_brl
-            maior = data["High"].max() * usd_brl
-            variacao = ((maior - menor) / menor) * 100
-            preco_compra, preco_venda = calc_sugestoes(preco)
-            df.append({
-                "Nome": name,
-                "Sigla": ticker,
-                "Preço (R$)": f"R$ {preco:,.2f}",
-                "Menor Preço (R$)": f"R$ {menor:,.2f}",
-                "Maior Preço (R$)": f"R$ {maior:,.2f}",
-                "Variação (%)": f"{variacao:.2f}%",
-                "Preço Compra Sugerido": f"R$ {preco_compra:,.2f}",
-                "Preço Venda Sugerido": f"R$ {preco_venda:,.2f}"
+            stock = yf.Ticker(ticker)
+            df_hist = stock.history(period="1d", interval="1m")
+            if df_hist.empty:
+                continue
+
+            price = df_hist['Close'][-1]
+            low = df_hist['Low'].min()
+            high = df_hist['High'].max()
+            change = ((price - df_hist['Open'][0]) / df_hist['Open'][0]) * 100
+            preco_compra = price * 0.95
+            preco_venda = price * 1.05
+
+            if price <= preco_compra:
+                send_telegram_alert(
+                    f"📉 Ação em oportunidade!\n"
+                    f"{ticker} abaixo do ideal de compra.\n"
+                    f"💰 Atual: R$ {price:.2f}\n"
+                    f"🎯 Alvo: R$ {preco_compra:.2f}"
+                )
+
+            stock_data.append({
+                "Ação": ticker,
+                "Preço Atual (R$)": f"R$ {price:.2f}",
+                "Mínimo do Dia (R$)": f"R$ {low:.2f}",
+                "Máximo do Dia (R$)": f"R$ {high:.2f}",
+                "Variação (%)": f"{change:.2f}%",
+                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
+                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
             })
-        except:
-            continue
-    return pd.DataFrame(df)
+        except Exception as e:
+            st.warning(f"Erro em {ticker}: {e}")
 
-# Interface
-st.set_page_config(layout="wide")
-st.title("📊 Painel de Análise de Ativos")
+    df = pd.DataFrame(stock_data)
+    st.table(df)
 
-aba = st.sidebar.radio("Escolha o Painel:", ("Criptomoedas", "Ações", "Commodities"))
+# Função painel Commodities
+def painel_commodities():
+    st.subheader("Painel Commodities")
+    commodity_list = [
+        "XAUUSD=X", "BZ=F", "CL=F", "HG=F", "CT=F", "KC=F", "ZS=F", "ZC=F", "SB=F", "PA=F"
+    ]
+    commodities_data = []
+
+    for commodity in commodity_list:
+        try:
+            com = yf.Ticker(commodity)
+            df_hist = com.history(period="1d", interval="1m")
+            if df_hist.empty:
+                continue
+
+            price = df_hist['Close'][-1]
+            low = df_hist['Low'].min()
+            high = df_hist['High'].max()
+            change = ((price - df_hist['Open'][0]) / df_hist['Open'][0]) * 100
+            preco_compra = price * 0.95
+            preco_venda = price * 1.05
+
+            if price <= preco_compra:
+                send_telegram_alert(
+                    f"🛢️ Commodity em oportunidade!\n"
+                    f"{commodity} abaixo do ideal de compra.\n"
+                    f"💰 Atual: R$ {price:.2f}\n"
+                    f"🎯 Alvo: R$ {preco_compra:.2f}"
+                )
+
+            commodities_data.append({
+                "Commodity": commodity,
+                "Preço Atual (R$)": f"R$ {price:.2f}",
+                "Mínimo do Dia (R$)": f"R$ {low:.2f}",
+                "Máximo do Dia (R$)": f"R$ {high:.2f}",
+                "Variação (%)": f"{change:.2f}%",
+                "Sugestão Compra (R$)": f"R$ {preco_compra:.2f}",
+                "Sugestão Venda (R$)": f"R$ {preco_venda:.2f}"
+            })
+        except Exception as e:
+            st.warning(f"Erro em {commodity}: {e}")
+
+    df = pd.DataFrame(commodities_data)
+    st.table(df)
+
+# Interface principal
+st.title("🔎 Painel de Análise de Ativos")
+
+aba = st.radio("Selecione o tipo de ativo:", ["Criptomoedas", "Ações", "Commodities"])
 
 if aba == "Criptomoedas":
-    st.header("🪙 Criptomoedas")
-    df = fetch_crypto_data()
-    st.dataframe(df, use_container_width=True)
-
+    painel_cripto()
 elif aba == "Ações":
-    st.header("📈 Ações")
-    df = fetch_yahoo_data(stock_tickers)
-    st.dataframe(df, use_container_width=True)
-
+    painel_acoes()
 elif aba == "Commodities":
-    st.header("🛢️ Commodities")
-    df = fetch_yahoo_data(commodity_tickers)
-    st.dataframe(df, use_container_width=True)
+    painel_commodities()
