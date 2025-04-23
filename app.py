@@ -4,100 +4,110 @@ import yfinance as yf
 import plotly.graph_objects as go
 import requests
 
-# Função para obter os dados da ação
+# --- Funções auxiliares ---
 
 def fetch_stock_data(tickers):
+    """Busca dados de fechamento, mínimo, máximo e calcula variação e preços sugeridos."""
     data = {}
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
-            info = stock.history(period="1d")
+            info = stock.history(period="1d", interval="1m")
             if not info.empty:
+                open_price = info["Open"].iloc[0]
+                close_price = info["Close"].iloc[-1]
+                low_price = info["Low"].min()
+                high_price = info["High"].max()
+                change_pct = ((close_price - open_price) / open_price) * 100
+                buy_price = close_price * 0.95
+                sell_price = close_price * 1.05
+
                 data[ticker] = {
                     "Nome": ticker,
-                    "Preço": info["Close"].iloc[-1],
-                    "Variação": info["Close"].pct_change().iloc[-1] * 100,
-                    "Menor preço do dia": info["Low"].iloc[-1],
-                    "Maior preço do dia": info["High"].iloc[-1],
-                    "Preço de compra sugerido": info["Close"].iloc[-1] * 0.95,
-                    "Preço de venda sugerido": info["Close"].iloc[-1] * 1.05,
+                    "Preço": close_price,
+                    "Menor preço do dia": low_price,
+                    "Maior preço do dia": high_price,
+                    "Variação (%)": change_pct,
+                    "Preço de compra sugerido": buy_price,
+                    "Preço de venda sugerido": sell_price
                 }
             else:
-                data[ticker] = {"Nome": ticker, "Erro": "Sem dados disponíveis"}
+                data[ticker] = {
+                    "Nome": ticker,
+                    "Erro": "Sem dados disponíveis"
+                }
         except Exception as e:
-            data[ticker] = {"Nome": ticker, "Erro": f"Erro ao obter dados: {str(e)}"}
+            data[ticker] = {
+                "Nome": ticker,
+                "Erro": f"Falha ao obter: {e}"
+            }
     return data
 
-# Função para obter o gráfico de candle
+@st.cache_data(ttl=180)
+def get_stock_data(tickers):
+    """Cache de 3 minutos para não refazer as requisições a cada atualização."""
+    return fetch_stock_data(tickers)
 
 def plot_candle_chart(ticker, period):
-    stock = yf.Ticker(ticker)
-    data = stock.history(period=period)
+    """Desenha gráfico de velas para o ticker e período escolhido."""
+    df = yf.Ticker(ticker).history(period=period)
+    if df.empty:
+        return None
     fig = go.Figure(data=[go.Candlestick(
-        x=data.index,
-        open=data['Open'],
-        high=data['High'],
-        low=data['Low'],
-        close=data['Close']
+        x=df.index,
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"]
     )])
     fig.update_layout(
-        title=f'Gráfico de {ticker} - Período: {period}',
-        xaxis_title='Data',
-        yaxis_title='Preço'
+        title=f"Candle de {ticker} ({period})",
+        xaxis_title="Data",
+        yaxis_title="Preço (R$)"
     )
     return fig
 
-# Lista de ações com a adição de 10 novos ativos
-
+# --- Lista de Ações (20 + 10 adicionais) ---
 tickers = [
-    "TSLA", "AMZN", "AAPL", "META", "NFLX", "NVDA", "GME", "AMC", "SPOT", "PLTR",
-    "ROKU", "SQ", "ZM", "DOCU", "BYND", "COIN", "HOOD", "MRNA", "SNOW", "BA", "GS",
-    "MSFT", "IBM", "BABA", "GOOG", "DIS", "WMT"
+    "TSLA","AMZN","AAPL","META","NFLX","NVDA","GME","AMC","SPOT","PLTR",
+    "ROKU","SQ","ZM","DOCU","BYND","COIN","HOOD","MRNA","SNOW",
+    "MSFT","GOOG","DIS","WMT","BA","JPM","V","JNJ","PG","XOM"
 ]
 
-# Atualizar os dados das ações a cada 3 minutos
-
-@st.cache_data(ttl=180)
-def get_stock_data():
-    return fetch_stock_data(tickers)
-
-# Função para exibir as informações das ações
-
-def display_stock_data():
-    df = pd.DataFrame(get_stock_data()).T
+# --- Funções de UI ---
+def display_stock_table(df):
+    """Exibe o DataFrame em tabela clicável e retorna o df para uso posterior."""
     st.dataframe(df, use_container_width=True)
     return df
 
-# Função principal de exibição
-
 def main():
-    st.title("Painel de Ações")
-    st.subheader("Painel de Ações")
+    st.title("📈 Painel de Ações")
+    st.markdown("Atualização a cada 3 minutos")
 
-    # Obtém dados e exibe tabela
-    df = display_stock_data()
+    # 1) Busca e exibe dados
+    raw = get_stock_data(tickers)
+    df = pd.DataFrame(raw).T
 
-    # Classificação das colunas
-    sort_by = st.selectbox(
-        "Classificar por:",
-        ['Preço', 'Variação', 'Menor preço do dia', 'Maior preço do dia']
-    )
-    if sort_by in df.columns:
-        df = df.sort_values(by=sort_by, ascending=False)
-        st.dataframe(df, use_container_width=True)
+    # 2) Permite ordenar clicando no cabeçalho
+    st.subheader("Tabela de Ações")
+    df = display_stock_table(df)
 
-    # Seleção de ativo para gráfico
-    selected_ticker = st.selectbox("Selecione uma Ação para o gráfico de velas", df['Nome'].tolist())
+    # 3) Seleção de ativo para o candle
+    st.subheader("Gráfico de Velas")
+    ticker = st.selectbox("Escolha o ticker:", df["Nome"].tolist())
 
-    # Filtros de período
+    # 4) Filtro de período
     period = st.selectbox(
-        "Período:",
-        ["1h", "3h", "6h", "12h", "24h", "5d", "15d", "1mo", "1y", "5y"]
+        "Período do Candle:",
+        ["1h","3h","6h","12h","24h","5d","15d","1mo","1y","5y"]
     )
 
-    if selected_ticker:
-        fig = plot_candle_chart(selected_ticker, period)
-        st.plotly_chart(fig, use_container_width=True)
+    if ticker:
+        fig = plot_candle_chart(ticker, period)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Não há dados para o período selecionado.")
 
 if __name__ == "__main__":
     main()
