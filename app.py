@@ -1,5 +1,5 @@
 import os
-# Forçar uso da implementação Python do protobuf (corrige incompatibilidade)
+# Workaround para compatibilidade com protobuf
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 import streamlit as st
@@ -18,7 +18,7 @@ st.set_page_config(layout="wide")
 BOT_TOKEN = '7971840892:AAH8sIg3iQUI7jQkMSd3YrYPaU4giRDVRQc'
 CHAT_ID = '1963421158'
 
-# Lista dos 20 ativos mencionados
+# Lista base de 20 ativos
 TICKERS = [
     'TSLA','AMZN','AAPL','META','NFLX','NVDA','GME','AMC','SPOT','PLTR',
     'ROKU','SQ','ZM','DOCU','BYND','COIN','HOOD','MRNA','SNOW','MSFT'
@@ -35,7 +35,7 @@ def send_telegram_alert(message):
     try:
         requests.post(url, data=payload)
     except Exception as e:
-        st.warning(f"Erro ao enviar alerta para o Telegram: {e}")
+        st.warning(f"Erro ao enviar alerta: {e}")
 
 # Calcula volatilidade histórica anualizada (3 meses)
 @st.cache_data(ttl=3600)
@@ -47,12 +47,12 @@ def get_historical_volatility(tickers):
             returns = df['Close'].pct_change().dropna()
             vol = float(returns.std() * sqrt(252) * 100)
             vol_list.append({'Ticker': ticker, 'Volatilidade Anual (%)': round(vol, 2)})
-        except Exception:
+        except:
             continue
-    vol_df = pd.DataFrame(vol_list).sort_values('Volatilidade Anual (%)', ascending=False).head(20)
+    vol_df = pd.DataFrame(vol_list).sort_values('Volatilidade Anual (%)', ascending=False).head(20).set_index('Ticker')
     return vol_df
 
-# Busca dados intradiários e envia alertas
+# Busca dados intradiários e envia alertas de menor preço do dia
 @st.cache_data(ttl=180)
 def fetch_stock_data(tickers):
     data = {}
@@ -72,7 +72,7 @@ def fetch_stock_data(tickers):
             buy = close * 0.98
             sell = close * 1.02
             if close <= low:
-                send_telegram_alert(f"🚨 {ticker} atingiu o menor preço do dia: R$ {close:.2f}")
+                send_telegram_alert(f"🚨 {ticker} atinge menor preço do dia: R$ {close:.2f}")
             data[ticker] = {
                 'Ticker': ticker,
                 'Preço': round(close, 2),
@@ -84,49 +84,60 @@ def fetch_stock_data(tickers):
                 'Histórico': df
             }
         except Exception as e:
-            st.warning(f"Erro ao baixar dados de {ticker}: {e}")
+            st.warning(f"Erro ao baixar {ticker}: {e}")
     return data
 
-# Exibe tabelas e gráfico
+# Exibe tabela de volatilidade
 
-def display_volatility_table(df):
-    st.subheader("Top 20 Ativos por Volatilidade Histórica (3 meses)")
-    st.dataframe(df, use_container_width=True)
+def display_volatility_table(vol_df):
+    st.subheader("Top 20 por Volatilidade Histórica (3 meses)")
+    st.dataframe(vol_df, use_container_width=True)
 
-def display_intraday_table(df):
+# Exibe tabela intradiária
+
+def display_intraday_table(data):
+    rows = []
+    for info in data.values():
+        rows.append({
+            'Ticker': info['Ticker'],
+            'Preço': info['Preço'],
+            'Menor Preço do Dia': info['Menor Preço do Dia'],
+            'Maior Preço do Dia': info['Maior Preço do Dia'],
+            'Variação (%)': info['Variação (%)'],
+            'Compra Sugerida': info['Compra Sugerida'],
+            'Venda Sugerida': info['Venda Sugerida']
+        })
+    df = pd.DataFrame(rows).set_index('Ticker')
     st.subheader("📈 Dados Intradiários e Alertas")
-    st.dataframe(df.drop(columns=['Histórico']), use_container_width=True)
+    st.dataframe(df, use_container_width=True)
+    return df
+
+# Exibe gráfico de candlestick
 
 def display_chart(hist, ticker):
     st.subheader(f"Candlestick de {ticker}")
-    fig = go.Figure(data=[
-        go.Candlestick(
-            x=hist.index,
-            open=hist['Open'],
-            high=hist['High'],
-            low=hist['Low'],
-            close=hist['Close']
-        )
-    ])
+    fig = go.Figure(data=[go.Candlestick(
+        x=hist.index,
+        open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close']
+    )])
     fig.update_layout(xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 
-# Main
+# Função principal
+
 def main():
     st.title("📊 TradeMaster AI - Ações")
-    # Volatilidade histórica
+    # Volatilidade
     vol_df = get_historical_volatility(TICKERS)
     display_volatility_table(vol_df)
-    # Dados intradiários
+    # Intradiário
     stock_data = fetch_stock_data(TICKERS)
     if not stock_data:
         st.error("Nenhum dado disponível.")
         return
-    intraday_df = pd.DataFrame([{k:v for k,v in item.items() if k!='Histórico'} for item in stock_data.values()]).set_index('Ticker')
-    display_intraday_table(intraday_df)
-    # Gráfico
+    intraday_df = display_intraday_table(stock_data)
     st.markdown("---")
-    ticker = st.selectbox("Selecione ativo para gráfico", intraday_df.index)
+    ticker = st.selectbox("Selecione ativo para gráfico", intraday_df.index.tolist())
     display_chart(stock_data[ticker]['Histórico'], ticker)
 
 if __name__ == '__main__':
