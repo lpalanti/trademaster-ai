@@ -10,8 +10,13 @@ st.title("📊 TradeMaster AI - Painéis de Acompanhamento")
 
 # Função para carregar dados de criptomoedas via CoinGecko
 def carregar_dados_cripto(ativos):
-    usd_brl = cg.get_price(ids="usd", vs_currencies="brl")["usd"]["brl"]
     tabela = []
+
+    try:
+        usd_brl = cg.get_price(ids="usd", vs_currencies="brl")["usd"]["brl"]
+    except:
+        st.error("Erro ao obter taxa USD/BRL.")
+        return pd.DataFrame()
 
     for nome, coin_id in ativos.items():
         try:
@@ -21,19 +26,24 @@ def carregar_dados_cripto(ativos):
             minimo = info["market_data"]["low_24h"]["brl"]
             vol = info["market_data"]["price_change_percentage_24h"]
 
+            preco_compra = preco * 0.95
+            preco_venda = preco * 1.05
+
             tabela.append({
                 "Nome": nome,
                 "Preço (R$)": f"R$ {preco:.2f}",
                 "Máximo 24h": f"R$ {maximo:.2f}",
                 "Mínimo 24h": f"R$ {minimo:.2f}",
                 "Variação 24h (%)": f"{vol:.2f}%",
+                "Sugestão de Compra": f"R$ {preco_compra:.2f}",
+                "Sugestão de Venda": f"R$ {preco_venda:.2f}",
             })
         except:
             continue
 
     return pd.DataFrame(tabela)
 
-# Função para carregar dados de ações ou commodities via Yahoo Finance
+# Função para carregar dados de ações e commodities via Yahoo Finance
 def carregar_dados_yahoo(ativos):
     tabela = []
 
@@ -46,12 +56,17 @@ def carregar_dados_yahoo(ativos):
             maximo = hist["High"].max()
             vol = (maximo - minimo) / preco_atual * 100 if preco_atual != 0 else 0
 
+            preco_compra = preco_atual * 0.95
+            preco_venda = preco_atual * 1.05
+
             tabela.append({
                 "Nome": nome,
                 "Preço (R$)": f"R$ {preco_atual:.2f}",
                 "Máximo 24h": f"R$ {maximo:.2f}",
                 "Mínimo 24h": f"R$ {minimo:.2f}",
                 "Variação (%)": f"{vol:.2f}%",
+                "Sugestão de Compra": f"R$ {preco_compra:.2f}",
+                "Sugestão de Venda": f"R$ {preco_venda:.2f}",
             })
         except:
             continue
@@ -112,6 +127,7 @@ commodities = {
     "Paládio": "PA=F"
 }
 
+# Interface
 st.subheader("🔍 Selecione a categoria que deseja visualizar:")
 
 col1, col2, col3 = st.columns(3)
