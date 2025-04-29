@@ -13,11 +13,13 @@ ativos_relevantes = [
 # Função para coletar dados do Yahoo Finance
 def get_data(symbol, period='1d', interval='5m'):
     try:
+        # Tentando baixar os dados do Yahoo Finance
         data = yf.download(symbol, period=period, interval=interval)
         if data.empty:
-            raise ValueError(f"Não foram encontrados dados para o símbolo {symbol}")
+            raise ValueError(f"Não foram encontrados dados para o símbolo {symbol}. Verifique se o símbolo está correto ou disponível.")
         return data
     except Exception as e:
+        # Caso aconteça algum erro ao buscar os dados
         st.error(f"Erro ao coletar dados para {symbol}: {e}")
         return None
 
@@ -70,7 +72,7 @@ def display_interface():
         else:
             st.error(f"A coluna 'Close' não foi encontrada nos dados para o símbolo {symbol}.")
     else:
-        st.warning(f"Não foi possível recuperar os dados para o símbolo {symbol}.")
+        st.warning(f"Não foi possível recuperar os dados para o símbolo {symbol}. Verifique o símbolo ou tente novamente mais tarde.")
 
     # Permitir que o usuário decida a operação
     action = st.sidebar.radio("Ação", ("Comprar", "Vender", "Esperar"))
