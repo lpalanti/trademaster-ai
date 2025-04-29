@@ -3,6 +3,13 @@ import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# Lista dos 30 ativos mais relevantes do mercado (exemplo)
+ativos_relevantes = [
+    'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC3.SA', 'AMZN', 'AAPL', 'GOOG', 'MSFT', 'TSLA', 'META', 
+    'NFLX', 'BRK-B', 'JPM', 'NVDA', 'WMT', 'V', 'DIS', 'PYPL', 'CSCO', 'MCD', 'BA', 'PG', 'XOM', 'CVX', 
+    'KO', 'NKE', 'PFE', 'PEP', 'COP', 'JNJ', 'GE', 'HD'
+]
+
 # Função para coletar dados do Yahoo Finance
 def get_data(symbol, period='1d', interval='5m'):
     try:
@@ -28,7 +35,7 @@ def calculate_stop_loss(data, risk_factor=1.5):
 def plot_data(data, sma):
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(data.index, data['Close'], label='Preço de Fechamento', color='blue')
-    ax.plot(data.index, sma, label='Média Móvel', color='orange')
+    ax.plot(data.index, sma, label='Média Móvel 20 dias', color='orange')
     ax.set_title("Gráfico de Preços e Média Móvel")
     ax.set_xlabel('Data')
     ax.set_ylabel('Preço')
@@ -38,10 +45,10 @@ def plot_data(data, sma):
 # Função para exibir a interface de Streamlit
 def display_interface():
     st.title("Automatização de Day Trade")
-    st.sidebar.header("Parâmetros de Configuração")
+    st.sidebar.header("Seleção de Ativos")
 
-    # Selecione o símbolo da ação
-    symbol = st.sidebar.text_input("Símbolo da Ação", "PETR4.SA")
+    # Selecione o ativo na barra lateral
+    symbol = st.sidebar.selectbox("Escolha o Ativo", ativos_relevantes)
 
     # Coletar os dados de mercado
     data = get_data(symbol)
@@ -80,3 +87,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
