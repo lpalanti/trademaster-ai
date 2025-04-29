@@ -1,4 +1,3 @@
-# Importar bibliotecas necessárias
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -7,8 +6,14 @@ import matplotlib.pyplot as plt
 
 # Função para coletar dados do Yahoo Finance
 def get_data(symbol, period='1d', interval='5m'):
-    data = yf.download(symbol, period=period, interval=interval)
-    return data
+    try:
+        data = yf.download(symbol, period=period, interval=interval)
+        if data.empty:
+            raise ValueError("No data found for symbol")
+        return data
+    except Exception as e:
+        st.error(f"Erro ao coletar dados para {symbol}: {e}")
+        return None
 
 # Função para calcular média móvel simples
 def calculate_sma(data, window=20):
@@ -41,24 +46,25 @@ def display_interface():
 
     # Coletar os dados de mercado
     data = get_data(symbol)
-    sma = calculate_sma(data)
+    if data is not None:
+        sma = calculate_sma(data)
 
-    # Exibir gráficos
-    plot_data(data, sma)
+        # Exibir gráficos
+        plot_data(data, sma)
 
-    # Exibir os valores calculados
-    st.subheader(f"Último Preço de Fechamento de {symbol}: {data['Close'][-1]:.2f}")
-    stop_loss = calculate_stop_loss(data)
-    st.subheader(f"Stop Loss Calculado: {stop_loss:.2f}")
+        # Exibir os valores calculados
+        st.subheader(f"Último Preço de Fechamento de {symbol}: {data['Close'][-1]:.2f}")
+        stop_loss = calculate_stop_loss(data)
+        st.subheader(f"Stop Loss Calculado: {stop_loss:.2f}")
 
-    # Permitir que o usuário decida a operação
-    action = st.sidebar.radio("Ação", ("Comprar", "Vender", "Esperar"))
-    if action == "Comprar":
-        st.write("Ordem de compra registrada!")
-    elif action == "Vender":
-        st.write("Ordem de venda registrada!")
-    else:
-        st.write("Aguardando oportunidades...")
+        # Permitir que o usuário decida a operação
+        action = st.sidebar.radio("Ação", ("Comprar", "Vender", "Esperar"))
+        if action == "Comprar":
+            st.write("Ordem de compra registrada!")
+        elif action == "Vender":
+            st.write("Ordem de venda registrada!")
+        else:
+            st.write("Aguardando oportunidades...")
 
 # Função principal para rodar a aplicação
 def main():
